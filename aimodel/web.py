@@ -33,7 +33,8 @@ def http_get(url: str, timeout: float = 15.0, retries: int = 2) -> str:
     raise AssertionError("unreachable")
 
 
-_SKIP = {"script", "style", "noscript", "nav", "header", "footer", "svg", "form", "aside"}
+_SKIP = {"script", "style", "noscript", "nav", "header", "footer", "svg", "form", "aside",
+         "h1", "h2", "h3", "h4", "h5", "h6"}  # headings are titles, not sentences
 _BLOCK = {"p", "div", "br", "li", "tr", "td", "section", "article", "blockquote", "pre",
           "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "table"}
 
@@ -70,11 +71,18 @@ class _TextExtractor(HTMLParser):
 
 
 def html_to_text(html: str) -> tuple[str, str]:
-    """Return (title, visible text) of an HTML page."""
+    """Return (title, visible text) of an HTML page.
+
+    Menus, tables of contents and buttons are dropped: only lines that read
+    like sentences (ending in punctuation, or long) are kept.
+    """
     parser = _TextExtractor()
     parser.feed(html)
     parser.close()
-    return " ".join(parser.title.split()), "".join(parser.parts)
+    lines = (" ".join(line.split()) for line in "".join(parser.parts).splitlines())
+    kept = [line for line in lines
+            if line.endswith((".", "!", "?", ":", '"', "”")) or len(line.split()) > 12]
+    return " ".join(parser.title.split()), "\n".join(kept)
 
 
 def fetch_page(url: str, get=http_get) -> str:

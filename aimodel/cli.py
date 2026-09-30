@@ -9,8 +9,9 @@ from .model import LearningModel
 
 HELP = """\
 Just type to chat or ask questions. I answer from what you taught me, from
-data you gave me, or (if online) by reading Wikipedia. If I don't know,
-I'll ask you to teach me.
+data you gave me, or (if online) by reading Wikipedia, and I explain the
+answer in my own words. Tell me facts ("My sister lives in Delhi") and I'll
+remember them. If I don't know something, I'll ask you to teach me.
 
 Teaching:
   /teach <prompt> => <response>   teach me a reply directly
@@ -22,11 +23,13 @@ Your data and the internet:
   /read <file or url>             learn from a text file or web page
   /web <question>                 look something up on Wikipedia and answer
   /online on|off                  allow automatic web lookups (now: {online})
-  /why                            show the evidence behind my last answer
+  /why                            show my reasoning for the last answer
+  /facts [topic]                  show facts I've learned (about a topic)
 
 Neural network:
   /train [epochs]                 give the network extra practice on all I know
   /similar <word>                 words the network thinks mean something similar
+  /vectors <file> [max words]     load pretrained word vectors (GloVe/fastText .txt)
 
 Other:
   /gen [start words]              generate text in your style
@@ -39,8 +42,14 @@ _NET_ERRORS = (urllib.error.URLError, TimeoutError, OSError, ValueError)
 
 
 def _show_reply(model: LearningModel, reply: str, confidence: float) -> None:
-    where = "memory" if model.last_source == "memory" else "reading"
     print(f"ai> {reply}")
+    if model.last_source == "noted":
+        return
+    if model.last_source == "memory":
+        where = "memory"
+    else:
+        sources = {s["source"] for s in model.last_trace if s["source"] != "my reasoning"}
+        where = f"reasoning over {len(sources)} source{'s' if len(sources) != 1 else ''}"
     print(f"    (from {where}, confidence {confidence:.2f}; /why, /good or /bad)")
 
 
@@ -58,10 +67,11 @@ def main(argv: list[str] | None = None) -> None:
     args = parser.parse_args(argv)
 
     model = LearningModel.load(args.brain)
+    model.notify = lambda message: print("ai>", message)
     online = not args.offline
     s = model.stats()
-    print(f"Loaded brain from {args.brain}: {s['memories']} memories, "
-          f"{s['knowledge sentences']} facts, {s['neural vocabulary']} words in the network.")
+    print(f"Loaded brain from {args.brain}: {s['memories']} memories, {s['facts']} facts, "
+          f"{s['knowledge sentences']} sentences, {s['neural vocabulary']} words in the network.")
     print(f"Web lookups are {'on' if online else 'off'}. Type /help for commands.\n")
 
     queued = None  # a command typed at one of my questions, run next
@@ -145,10 +155,39 @@ def main(argv: list[str] | None = None) -> None:
                     print("ai> I haven't given an answer I can explain yet.")
                     continue
                 print(f"ai> To answer '{model.last_query}' I used:")
+                labels = {"fact": "fact", "evidence": "evidence", "inference": "reasoning",
+                          "memory": "memory"}
                 for i, step in enumerate(model.last_trace, 1):
-                    matched = ", ".join(step["matched"]) or "similar meaning"
-                    print(f"  {i}. {step['text']}")
-                    print(f"     source: {step['source']} | match {step['score']:.2f} on: {matched}")
+                    print(f"  {i}. [{labels.get(step['kind'], step['kind'])}] {step['text']}")
+                    detail = f"source: {step['source']}"
+                    if "score" in step:
+                        matched = ", ".join(step.get("matched", [])) or "similar meaning"
+                        detail += f" | match {step['score']:.2f} on: {matched}"
+                    if step["source"] != "my reasoning":
+                        print(f"     {detail}")
+            elif cmd == "/facts":
+                topic = {w.lower() for w in arg.split()}
+                from .reasoning import state, stem
+                found = [f for f in model.facts
+                         if not topic or {stem(t) for t in topic} & {stem(w) for w in f["subj"].lower().split() + f["obj"].lower().split()}]
+                if not found:
+                    print("ai> I don't know any facts about that yet.")
+                for f in found[-20:]:
+                    print(f"   - {state(f)}  ({f['source']})")
+                if len(found) > 20:
+                    print(f"   ... and {len(found) - 20} more")
+            elif cmd == "/vectors":
+                parts = arg.split()
+                if not parts:
+                    print("usage: /vectors <glove or fastText .txt/.zip file> [max words]")
+                    continue
+                print("ai> Loading word vectors (this can take a minute)...")
+                try:
+                    n = model.load_vectors(parts[0], int(parts[1]) if len(parts) > 1 else 50_000)
+                except (OSError, ValueError, StopIteration) as e:
+                    print(f"ai> I couldn't load those vectors: {e}")
+                    continue
+                print(f"ai> Loaded {n} pretrained words. I now understand word meanings much better.")
             elif cmd == "/train":
                 epochs = int(arg) if arg.isdigit() else 5
                 loss = model.retrain(epochs)
@@ -174,7 +213,7 @@ def main(argv: list[str] | None = None) -> None:
             continue
 
         try:
-            reply, confidence = model.respond(text, use_web=online, notify=lambda m: print("ai>", m))
+            reply, confidence = model.respond(text, use_web=online)
         except _NET_ERRORS as e:
             print(f"ai> (web lookup failed: {e})")
             reply, confidence = model.respond(text)

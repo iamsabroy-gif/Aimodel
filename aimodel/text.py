@@ -7,7 +7,8 @@ import re
 from collections import Counter, defaultdict
 
 _TOKEN_RE = re.compile(r"[a-z0-9']+")
-_SENT_RE = re.compile(r"(?<=[.!?])\s+(?=[\"'(\[]?[A-Z0-9])")
+_SENT_RE = re.compile(r"(?<=[.!?])\s+(?=[\"'(\[]?[A-Za-z0-9])")
+_ABBREV = re.compile(r"(\b(e\.g|i\.e|etc|vs|mr|mrs|ms|dr|prof|st|no|fig|approx|inc|ltd|jr|sr)|\b[A-Za-z])\.$", re.I)
 
 STOPWORDS = frozenset("""
 a an the is are was were be been being am do does did done of to in on at for by
@@ -39,16 +40,41 @@ def looks_like_question(text: str) -> bool:
     return text.endswith("?") or text.startswith(_QUESTION_WORDS)
 
 
+_DANGLING = {"the", "a", "an", "of", "in", "to", "and", "or", "by", "with", "for", "from", "as", "at", "on"}
+_CODE = re.compile(r">>>|==|\s=\s|\w\(|[{}]|\.\.\.|;\s*$")
+_PROSE_CHARS = re.compile(r"[\w\s,.'’%!?()\-\"]")
+
+
+def is_prose(sentence: str) -> bool:
+    """False for code snippets and symbol soup that got mixed into text."""
+    if _CODE.search(sentence):
+        return False
+    words = sentence.split()
+    if words and words[-1].lower().rstrip(".!?") in _DANGLING:
+        return False  # cut off mid-phrase ("... directly in the.")
+    if not sentence.endswith((".", "!", "?", '"', "'")) and len(words) <= 8:
+        later = [w for w in words[1:] if w[0].isalpha()]
+        if later and sum(w[0].isupper() for w in later) >= 0.6 * len(later):
+            return False  # a heading like "Unpacking Argument Lists"
+    return len(_PROSE_CHARS.findall(sentence)) >= 0.9 * len(sentence)
+
+
 def split_sentences(text: str, min_words: int = 3, max_chars: int = 400) -> list[str]:
     """Split raw text (a document, web page...) into clean sentences."""
     out = []
     for line in text.splitlines():
-        line = " ".join(line.split())
+        line = " ".join(line.replace("¶", " ").split())
         if not line or line.startswith("="):  # skip blank lines and wiki headings
             continue
-        for sent in _SENT_RE.split(line):
+        pieces = []
+        for piece in _SENT_RE.split(line):
+            if pieces and _ABBREV.search(pieces[-1]):  # "e.g. this" isn't a new sentence
+                pieces[-1] += " " + piece
+            else:
+                pieces.append(piece)
+        for sent in pieces:
             sent = sent.strip()
-            if len(sent.split()) < min_words:
+            if len(sent.split()) < min_words or not is_prose(sent):
                 continue
             if len(sent) > max_chars:
                 sent = sent[:max_chars].rsplit(" ", 1)[0] + " ..."
@@ -71,8 +97,8 @@ class TfidfIndex:
                 self.postings[t].append((i, w))
 
     def vector(self, tokens: list[str]) -> dict[str, float]:
-        tf = Counter(tokens)
-        vec = {t: c * self.idf.get(t, 0.0) for t, c in tf.items()}
+        tf = Counter(tokens)  # sublinear: saying a word 3 times isn't 3x as relevant
+        vec = {t: (1 + math.log(c)) * self.idf.get(t, 0.0) for t, c in tf.items()}
         norm = math.sqrt(sum(v * v for v in vec.values())) or 1.0
         return {t: v / norm for t, v in vec.items() if v}
 

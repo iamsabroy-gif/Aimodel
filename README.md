@@ -52,32 +52,55 @@ Your brain files work anywhere: train on Kaggle, keep using them on your phone.
 
 ## How it works
 
-When you ask something, it tries, in order:
+When you type something, it:
 
-1. **What you taught it:** replies you taught it, matched by meaning.
-2. **Your data and what it has read:** sentences from files and pages you gave it.
-3. **The internet:** if it's a question and web lookups are on, it searches
-   Wikipedia, reads the top articles, learns from them and answers.
-4. **You:** if it still doesn't know, it asks you and remembers your answer.
+1. **Checks what you taught it:** replies you taught it, matched by meaning.
+2. **Remembers facts you state:** "My sister lives in Delhi" becomes a fact.
+   Later, "Where does my sister live?" gets "Your sister lives in Delhi."
+3. **Reasons over what it knows** (your files, pages it read, facts) and
+   writes an answer in its own words.
+4. **Looks things up:** for a question it can't answer, it reads Wikipedia
+   and tries again (if web lookups are on).
+5. **Asks you:** if it still doesn't know, you teach it.
 
-### The neural network
+### Reasoning and its own explanations
 
-`aimodel/neural.py` is a small **word2vec (skip-gram + negative sampling)
-neural network** written in numpy. It trains on everything the model sees (your
-messages, your files, web pages) and learns a vector for every word, so that
-words used in similar ways end up close together. Sentence vectors built from
-these let it match questions to answers by *meaning*, not just by exact words.
-Try `/similar <word>` to see what it has learned, and `/train` to give it
-extra practice.
+Every sentence it reads is turned into simple **facts** (subject → verb →
+object), e.g. "Cats are mammals" → `Cats | are | mammals`. It uses them to:
 
-### Reasoning over evidence
+- **Prove things it was never told** by chaining facts:
+  *Is a cat a living thing?* → "Yes. Cats are mammals, and mammals are
+  warm-blooded animals, and animals are living things, so a cat is a living thing."
+- **Say no** when a fact rules it out: *Is a snake a mammal?* → "No. Snakes are not mammals."
+- **Explain why** by finding a stated cause: *Why is the sky blue?* →
+  "The reason is that air molecules scatter blue sunlight more than red sunlight."
+- **Explain how** as ordered steps: *How do I make tea?* → "Here's how:
+  First, … Then, … Finally, …"
+- **Connect facts:** *What is my dog called?* → "Your dog is called Rex,
+  which is a golden retriever."
+- **Talk to you about you:** "I", "my" in your notes become "you", "your".
 
-To answer from what it has read, it ranks sentences (TF-IDF + neural
-similarity), picks the best one, then adds sentences that cover the parts of
-your question the answer doesn't cover yet, so it can combine facts from
-different places. It only answers when the evidence covers at least half of
-what you asked about. `/why` shows each piece of evidence, where it came
-from, and which words matched.
+`/why` shows every step: which facts and evidence it used, where each came
+from, and what it inferred. `/facts <topic>` lists what it knows.
+
+### Neural networks
+
+- **Word-meaning network** (`neural.py`): a word2vec (skip-gram) neural
+  network written in numpy. It trains on everything it reads and learns which
+  words are related (`/similar <word>`, `/train`). It **grows automatically**:
+  once it knows 8,000 words it rebuilds itself with bigger vectors (48 → 96),
+  and again at 30,000 words (→ 160). Its opinion counts more as it reads more
+  (full trust after about 50,000 words), so a young network can't cause wrong
+  matches.
+- **Feedback network** (`ranker.py`): a small neural network that learns from
+  your `/good` and `/bad` which kind of evidence makes a good answer, so its
+  choices move toward your taste.
+- **Pretrained word vectors** (optional, `vectors.py`): load GloVe or fastText
+  vectors with `/vectors <file>` to give it knowledge of billions of words from
+  day one (e.g. that "job" ≈ "work"). Get `glove.6B.50d.txt` from
+  <https://nlp.stanford.edu/projects/glove/>, or on Kaggle add the
+  "glove6b50dtxt" dataset and run
+  `/vectors /kaggle/input/glove6b50dtxt/glove.6B.50d.txt`.
 
 ## Commands
 
@@ -90,7 +113,9 @@ from, and which words matched.
 | `/read <file or url>` | learn from a text file or web page |
 | `/web <question>` | look it up on Wikipedia now |
 | `/online on\|off` | allow automatic web lookups |
-| `/why` | show the evidence behind the last answer |
+| `/why` | show the reasoning behind the last answer |
+| `/facts [topic]` | list facts it has learned |
+| `/vectors <file> [max words]` | load pretrained word vectors (GloVe / fastText) |
 | `/train [epochs]` | extra neural network training on everything it knows |
 | `/similar <word>` | words the network thinks are related |
 | `/gen [words]` | generate text in your writing style |
@@ -102,23 +127,33 @@ Everything is saved after every step, so it keeps learning between sessions.
 
 ```
 you> /read notes.txt
-ai> I read 3 new sentences and trained my network on them.
-you> who is my friend?
-ai> I go running every Saturday morning with my friend Ravi.
-    (from reading, confidence 0.38; /why, /good or /bad)
+ai> I read 5 new sentences and trained my network on them.
+you> My sister lives in Delhi
+ai> Got it: Your sister lives in Delhi.
+you> Is a cat a living thing?
+ai> Yes. Cats are mammals, and mammals are warm-blooded animals, and animals are
+    living things, so a cat is a living thing.
+    (from reasoning over 1 source, confidence 0.80; /why, /good or /bad)
 you> /why
-ai> To answer 'who is my friend?' I used:
-  1. I go running every Saturday morning with my friend Ravi.
-     source: notes.txt | match 0.38 on: friend
+ai> To answer 'Is a cat a living thing?' I used:
+  1. [fact] Cats are mammals.
+     source: notes.txt
+  2. [fact] Mammals are warm-blooded animals.
+     source: notes.txt
+  3. [fact] Animals are living things.
+     source: notes.txt
+  4. [reasoning] Chained 3 facts: cat -> mammal -> animal -> thing
 ```
 
 ## Limits (honestly)
 
-This is a *small* model. It answers by finding and combining sentences it has
-read; it does not write new explanations like a large language model. The
-neural network gets better with more text: with only a few sentences it
-can't yet know that, say, "job" and "work" mean similar things. Feed it more
-of your data (`/read`) and let it read the web to improve it.
+This is a *small* model that runs on a phone. Its explanations are built from
+facts and sentences it has read, combined with its own sentence patterns and
+reasoning steps. It does not invent new ideas or write long essays like a
+large language model (those have billions of parameters). Fact extraction
+uses simple grammar patterns, so complicated sentences are used as evidence
+rather than as facts. It gets better the more you feed it: `/read` your data,
+let it read the web, load pretrained vectors, and give `/good` / `/bad` feedback.
 
 ## Use it from code
 
@@ -129,7 +164,9 @@ m = LearningModel.load("brain.json")
 m.read("notes.txt")                          # your data
 m.learn("what's your name", "I'm Sage.")    # teach it
 reply, confidence = m.respond("What is photosynthesis?", use_web=True)
-print(reply, m.last_trace)                   # answer + evidence
+print(reply, m.last_trace)                   # answer + reasoning steps
+m.respond("My sister lives in Delhi")         # it learns facts you state
+m.load_vectors("glove.6B.50d.txt")           # optional word knowledge
 m.feedback(good=True)
 m.save("brain.json")
 ```

@@ -51,7 +51,7 @@ class TestKnowledge(unittest.TestCase):
 
     def test_unrelated_questions_are_not_answered(self):
         self.assertIsNone(self.m.respond("who invented the telephone?")[0])
-        self.assertIsNone(self.m.respond("I like building small things")[0])
+        self.assertIsNone(self.m.respond("hello there")[0])
 
     def test_web_lookup_only_when_enabled(self):
         self.assertIsNone(self.m.respond("What is photosynthesis?")[0])
@@ -101,11 +101,13 @@ class TestNeural(unittest.TestCase):
 
     def test_network_helps_match_different_wording(self):
         m = LearningModel(seed=0)
+        m.neural.MATURE_WORDS = 5000  # a small, very regular corpus is enough here
         corpus = []
-        for a in ["cat", "dog", "horse", "cow"]:
-            corpus += [f"my {a} runs and sleeps in the barn every night."] * 20
+        for a in ["cat", "dog", "horse", "cow"]:  # enough text for the network to be trusted
+            corpus += [f"my {a} runs and sleeps in the barn on night {i}." for i in range(150)]
         m.add_document(" ".join(corpus), "animals")
         m.learn("where does the cat sleep", "In the barn.")
+        self.assertEqual(m.neural.maturity, 1.0)
         self.assertEqual(m.respond("where does the horse sleep")[0], "In the barn.")
 
 
@@ -114,11 +116,20 @@ class TestText(unittest.TestCase):
         self.assertEqual(split_sentences("== Title ==\nOne two three. Four five six!"),
                          ["One two three.", "Four five six!"])
 
+    def test_split_sentences_lowercase_and_abbreviations(self):
+        self.assertEqual(split_sentences("my cat runs fast. my dog sleeps a lot. Dr. Rao saw e.g. cats here."),
+                         ["my cat runs fast.", "my dog sleeps a lot.", "Dr. Rao saw e.g. cats here."])
+
     def test_html_to_text_drops_scripts(self):
-        title, text = html_to_text("<title>Hi</title><script>bad()</script><p>Good\ntext</p>")
+        title, text = html_to_text("<title>Hi</title><script>bad()</script><p>Good\ntext.</p>")
         self.assertEqual(title, "Hi")
         self.assertNotIn("bad", text)
         self.assertIn("Good text", text)
+
+    def test_html_to_text_drops_menus(self):
+        _, text = html_to_text("<ul><li><a href='#a'>Home</a></li><li>About us</li></ul>"
+                               "<p>Mars is the fourth planet.</p>")
+        self.assertEqual(text, "Mars is the fourth planet.")
 
 
 if __name__ == "__main__":

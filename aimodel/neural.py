@@ -50,6 +50,14 @@ class WordEmbeddings:
     def __len__(self) -> int:
         return len(self.words)
 
+    # Word vectors need a lot of text before their similarities can be trusted.
+    MATURE_WORDS = 50_000
+
+    @property
+    def maturity(self) -> float:
+        """0..1: how much to trust this network, growing with the text it has read."""
+        return float(min(1.0, self.counts.sum() / self.MATURE_WORDS)) if len(self.counts) else 0.0
+
     def _add_words(self, tokens: list[str]) -> None:
         new = [t for t in dict.fromkeys(tokens) if t not in self.vocab]
         if new:
