@@ -57,6 +57,14 @@ class TestReasoning(unittest.TestCase):
         self.assertEqual(kinds.count("fact"), 3)
         self.assertIn("inference", kinds)
 
+    def test_generalizing_from_one_kind_is_only_probable(self):
+        self.m.add_document("The sperm whale is a large mammal.", "whales.txt")
+        self.assertTrue(self.ask("Is a whale a mammal?").startswith("Probably yes."))
+
+    def test_answer_must_cover_the_key_word(self):
+        self.m.add_document("The pigments are arranged to work together.", "plants.txt")
+        self.assertIsNone(self.ask("How do vaccines work?"))
+
     def test_negative_facts(self):
         self.assertTrue(self.ask("Is a snake a mammal?").startswith("No."))
 

@@ -316,6 +316,19 @@ class LearningModel:
         words = keywords(text) or tokenize(text)
         return {stem(w): self._expand(w) for w in words}
 
+    def _key_word(self, wanted: dict[str, set[str]]) -> str:
+        """The most specific word of a question (rarest in what I've read).
+
+        An answer that doesn't cover it isn't about the question at all, e.g.
+        photosynthesis text mentioning "work" for "How do vaccines work?".
+        """
+        index = self._knowledge_index()[0] if self.knowledge else None
+        def rarity(w):
+            if index is None:
+                return 0.0
+            return max((index.idf.get(v, 99.0) for v in wanted[w]), default=99.0)
+        return max(wanted, key=rarity)
+
     def answer_from_knowledge(self, text: str, max_sentences: int = 3, bonus=None):
         """Gather evidence sentences for a question.
 
@@ -369,8 +382,10 @@ class LearningModel:
 
         coverage = len(covered) / len(wanted)
         confidence = float(min(1.0, top)) * (0.4 + 0.6 * coverage)
-        # The evidence has to mention at least half of what you asked about.
-        if coverage < 0.5 or confidence < self.knowledge_threshold:
+        # The evidence has to mention the question's key word and at least
+        # half of what you asked about.
+        if (coverage < 0.5 or self._key_word(wanted) not in covered
+                or confidence < self.knowledge_threshold):
             return None
         trace = [{"kind": "evidence", "text": self.knowledge[c["i"]]["text"],
                   "source": self.knowledge[c["i"]]["source"], "pos": self.knowledge[c["i"]].get("pos", 0),
@@ -405,7 +420,9 @@ class LearningModel:
                 chosen.append(f)
                 covered |= cov
         coverage = len(covered) / len(wanted)
-        return (chosen, coverage) if coverage >= 0.5 else ([], 0.0)
+        if coverage < 0.5 or self._key_word(wanted) not in covered:
+            return [], 0.0
+        return chosen, coverage
 
     def _prove(self, text: str):
         """Answer "Is X a Y?" by chaining is-a facts."""
@@ -426,12 +443,19 @@ class LearningModel:
             if path:
                 links = [rsn.state(f).rstrip(".") for f in path]
                 steps = [{"kind": "fact", "text": rsn.state(f), "source": f["source"]} for f in path]
+                # "The sperm whale is a mammal" says something about one kind of whale,
+                # so for "a whale" it's a good guess, not a proof.
+                narrower = {stem(w) for w in tokenize(_bare(path[0]["subj"]))} - {stem(w) for w in tokenize(_bare(subj))}
+                verdict, conf = ("Probably yes", 0.6) if narrower else ("Yes", 0.9 if len(path) == 1 else 0.8)
+                if narrower:
+                    steps.append({"kind": "inference", "source": "my reasoning",
+                                  "text": f"'{path[0]['subj']}' is one kind of {a}, so this is a generalization"})
                 if len(path) == 1:
-                    return f"Yes. {links[0]}.", 0.9, steps
+                    return f"{verdict}. {links[0]}.", conf, steps
                 chain = ", and ".join([links[0]] + [self._lower(l) for l in links[1:]])
                 steps.append({"kind": "inference", "source": "my reasoning",
                               "text": f"Chained {len(path)} facts: {' -> '.join(rsn.head(f['subj']) for f in path)} -> {b}"})
-                return f"Yes. {chain}, so {subj} {words[0]} {obj}.", 0.8, steps
+                return f"{verdict}. {chain}, so {subj} {words[0]} {obj}.", conf, steps
         return None
 
     def explain(self, text: str):

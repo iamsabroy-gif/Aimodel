@@ -103,7 +103,8 @@ def wikipedia(query: str, limit: int = 2, get=http_get,
     params = {"action": "query", "list": "search", "srsearch": query,
               "srlimit": limit, "format": "json"}
     data = json.loads(get(WIKI_API + "?" + urllib.parse.urlencode(params)))
-    titles = [hit["title"] for hit in data.get("query", {}).get("search", [])]
+    titles = [hit["title"] for hit in data.get("query", {}).get("search", [])
+              if "(disambiguation)" not in hit["title"]]
     results = []
     for title in titles:  # full-article extracts are limited to one title per request
         params = {"action": "query", "prop": "extracts", "explaintext": 1,
