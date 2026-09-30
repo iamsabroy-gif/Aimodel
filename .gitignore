@@ -1,3 +1,4 @@
 brain.json
+brain.neural.npz
 *.tmp
 __pycache__/
