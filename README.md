@@ -12,6 +12,44 @@ python3 -m aimodel --offline       # never look things up on the web
 python3 -m aimodel --brain me.json # use a different brain file
 ```
 
+## Run it on Android
+
+**Pydroid 3 (easiest):** install *Pydroid 3* from the Play Store, then
+Menu → Pip → install `numpy`. Download this repo as a ZIP (Code → Download
+ZIP), unzip it, open `run.py` in Pydroid and press ▶.
+
+**Termux:** install Termux from F-Droid (not the Play Store), then:
+
+```bash
+pkg update && pkg install python python-numpy git
+git clone -b ccr-34fc447e-og7rx9 https://github.com/iamsabroy-gif/Aimodel.git
+cd Aimodel && python run.py
+```
+
+Run `termux-setup-storage` once to read your files, e.g.
+`/read /sdcard/Download/notes.txt`. Use `pkg install python-numpy`, not
+`pip install numpy` (pip tries to build numpy on the phone).
+
+## Run it on Kaggle
+
+Create a notebook and turn **Internet on** (Session options). Then:
+
+```python
+!git clone -b ccr-34fc447e-og7rx9 https://github.com/iamsabroy-gif/Aimodel.git
+%cd Aimodel
+
+from aimodel.cli import main                # interactive chat; /quit to stop
+main(["--brain", "/kaggle/working/brain.json"])
+```
+
+Or use it from code (see *Use it from code* below). Upload your `.txt` files
+with **+ Add Input** and `m.read("/kaggle/input/<dataset>/notes.txt")`.
+Kaggle wipes the session when it ends, so download `brain.json` and
+`brain.neural.npz` from `/kaggle/working/`, or save them as a dataset and copy
+them back next time.
+
+Your brain files work anywhere: train on Kaggle, keep using them on your phone.
+
 ## How it works
 
 When you ask something, it tries, in order:
