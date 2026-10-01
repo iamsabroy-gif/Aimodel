@@ -7,6 +7,7 @@ writer_data.jsonl  one example per line: question, evidence (the sentences the a
 corpus.txt         every sentence the model read, for language practice.
 
 The facts are generic samples (animals, countries, science, how-tos, Python, a made-up
-person), not your data. A writer trained on this learns to word answers from evidence.
+person plus 40 more made-up people), not your data. A writer trained on this learns to word answers
+from evidence.
 Train with:  python -m aimodel.train_writer --data sample_data --out writer.npz
 Rebuild with: python -m aimodel.sample_data --out sample_data

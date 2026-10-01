@@ -116,15 +116,12 @@ def build_examples(model, limit: int = 5000, extra_questions=(), exam_questions:
     return examples
 
 
-def export_training_data(model, folder: str, extra_questions=(), exam_questions: bool = True) -> dict:
-    """Write writer_data.jsonl (examples) and corpus.txt (all text it has read)."""
+def write_training_files(folder: str, examples: list[dict], lines: list[str]) -> dict:
+    """Write writer_data.jsonl (examples), corpus.txt (text to read) and ABOUT.txt."""
     os.makedirs(folder, exist_ok=True)
-    examples = build_examples(model, extra_questions=extra_questions, exam_questions=exam_questions)
     with open(os.path.join(folder, "writer_data.jsonl"), "w", encoding="utf-8") as f:
         for ex in examples:
             f.write(json.dumps(ex, ensure_ascii=False) + "\n")
-    lines = [k["text"] for k in model.knowledge + model.shelf]
-    lines += [f"{m['prompt']}\n{m['response']}" for m in model.memories]
     with open(os.path.join(folder, "corpus.txt"), "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
     with open(os.path.join(folder, "ABOUT.txt"), "w", encoding="utf-8") as f:
@@ -135,6 +132,14 @@ def export_training_data(model, folder: str, extra_questions=(), exam_questions:
                 "Train with: python -m aimodel.train_writer --data <this folder> --out writer.npz\n")
     return {"folder": folder, "examples": len(examples), "corpus lines": len(lines),
             "by kind": dict(Counter(e["kind"] for e in examples))}
+
+
+def export_training_data(model, folder: str, extra_questions=(), exam_questions: bool = True) -> dict:
+    """Write everything the writer can learn from this model (see `write_training_files`)."""
+    examples = build_examples(model, extra_questions=extra_questions, exam_questions=exam_questions)
+    lines = [k["text"] for k in model.knowledge + model.shelf]
+    lines += [f"{m['prompt']}\n{m['response']}" for m in model.memories]
+    return write_training_files(folder, examples, lines)
 
 
 # ------------------------------------------------------------------- the model side

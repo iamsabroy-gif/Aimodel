@@ -124,47 +124,84 @@ def from_numpy(torch, model, weights: dict, n_layer: int) -> None:
 
 
 _WORD = re.compile(r"[A-Za-z]{3,}")
+_ONSETS = ["", "b", "c", "d", "f", "g", "h", "j", "k", "l", "m", "n", "p", "r", "s", "t", "v", "w", "z",
+           "br", "cr", "dr", "fl", "gr", "pl", "pr", "st", "str", "tr", "ch", "sh", "th", "wh", "sp",
+           "sk", "sl", "sn", "gl", "cl", "bl", "fr"]
+_NUCLEI = ["a", "e", "i", "o", "u", "a", "e", "i", "o", "u", "oo", "ea", "ai", "ou", "ie", "au", "ee"]
+_CODAS = ["", "", "", "n", "r", "s", "t", "l", "m", "k", "x", "nd", "st", "rt", "ng", "sh", "ck", "se"]
+
+
+_SIMPLE = ["b", "d", "f", "g", "k", "l", "m", "n", "p", "r", "s", "t", "v", "z"]
+
+
+def fake_word(rng: random.Random) -> str:
+    """A pronounceable made-up word, 3-9 letters, of varied shape (moose-like, panda-like...)."""
+    for _ in range(20):
+        n = rng.choices([1, 2, 3], [3, 6, 2])[0]
+        parts = []
+        for i in range(n):
+            onset = rng.choice(_ONSETS) if i == 0 else rng.choice(_SIMPLE)
+            nucleus = rng.choice(_NUCLEI) if (i == 0 or rng.random() < 0.25) else rng.choice("aeiou")
+            coda = rng.choice(_CODAS) if i == n - 1 else (rng.choice("nrs") if rng.random() < 0.2 else "")
+            parts.append(onset + nucleus + coda)
+        word = "".join(parts)
+        if 3 <= len(word) <= 9:
+            return word
+    return rng.choice(_SIMPLE) + rng.choice("aeiou") + rng.choice(_SIMPLE) + rng.choice("aeiou")
+
+
+def name_stats(texts: list[str]) -> tuple[set[str], list[str]]:
+    """(ordinary words, rare words). Ordinary words occur in many different texts; the rest
+    are names (moose, Canberra...) that the model must copy from the evidence."""
+    spread = Counter(w for t in texts for w in {w.lower() for w in _WORD.findall(t)})
+    floor = max(3, 0.02 * len(texts))
+    common = {w for w, n in spread.items() if n >= floor}
+    rare = sorted(w for w, n in spread.items() if n < floor and len(w) >= 4)
+    return common, rare
+
+
+def swap_names(question: str, evidence: list[str], answer: str, rng: random.Random,
+               common: set[str], rare: list[str], most: int = 4, real: float = 0.4):
+    """Replace the names the answer copies from the evidence, everywhere and consistently,
+    by made-up words (or other real words from the data). Memorising a name then never helps:
+    the only way to answer is to read the evidence."""
+    text = " ".join(evidence)
+    names = sorted({w for w in _WORD.findall(answer) if w.lower() not in common
+                    and re.search(r"\b%s\b" % re.escape(w), text)})
+    if not names:
+        return question, evidence, answer
+    rng.shuffle(names)
+    used = {w.lower() for w in _WORD.findall(question + " " + text + " " + answer)}
+    swap = {}
+    for name in names[:most]:
+        for _ in range(5):
+            new = rng.choice(rare) if rare and rng.random() < real else fake_word(rng)
+            if new.lower() not in used:
+                break
+        used.add(new.lower())
+        swap[name.lower()], swap[name.capitalize()] = new.lower(), new.capitalize()
+    pattern = re.compile(r"\b(%s)\b" % "|".join(map(re.escape, swap)))
+    sub = lambda t: pattern.sub(lambda m: swap[m.group(1)], t)
+    return sub(question), [sub(e) for e in evidence], sub(answer)
 
 
 class Batches:
     """Mixes writing practice (answers only are scored) with language practice.
 
-    Name swapping: in some examples, the names the answer copies from the
-    evidence are replaced (everywhere, consistently) by made-up words. A model
-    can't memorise a made-up word, so it must learn to *read the evidence*
-    instead of reciting things from memory - the cure for making things up.
+    Name swapping (see `swap_names`) is applied to most examples so the model learns to
+    copy names from the evidence instead of reciting facts it memorised.
     """
 
-    def __init__(self, tokenizer, examples, corpus, block, rng, swap: float = 0.5):
+    def __init__(self, tokenizer, examples, corpus, block, rng, swap: float = 0.85):
         self.tok, self.examples, self.block, self.rng = tokenizer, examples, block, rng
         self.weights = [float(e.get("weight", 1.0)) for e in examples]
         self.corpus, self.swap = corpus, swap
-        # Ordinary words (found in many different sentences) stay; rarer ones are names.
-        texts = corpus + [e["answer"] for e in examples]
-        spread = Counter(w for t in texts for w in {w.lower() for w in _WORD.findall(t)})
-        floor = max(3, 0.02 * len(texts))
-        self.common = {w for w, n in spread.most_common(300) if n >= floor}
+        self.common, self.rare = name_stats(corpus + [e["answer"] for e in examples])
         stream = tokenizer.encode("\n".join(corpus)) if corpus else []
         self.stream = np.array(stream, dtype=np.int64)
 
-    def _made_up_word(self) -> str:
-        return "".join(self.rng.choice("bcdfghjklmnprstvz") + self.rng.choice("aeiou")
-                       for _ in range(self.rng.randint(2, 4)))
-
     def _swap_names(self, question: str, evidence: list[str], answer: str):
-        text = " ".join(evidence)
-        names = sorted({w for w in _WORD.findall(answer) if w.lower() not in self.common
-                        and re.search(r"\b%s\b" % re.escape(w), text)})
-        if not names:
-            return question, evidence, answer
-        self.rng.shuffle(names)
-        swap = {}
-        for name in names[:3]:
-            fake = self._made_up_word()
-            swap[name.lower()], swap[name.capitalize()] = fake, fake.capitalize()
-        pattern = re.compile(r"\b(%s)\b" % "|".join(map(re.escape, swap)))
-        sub = lambda t: pattern.sub(lambda m: swap[m.group(1)], t)
-        return sub(question), [sub(e) for e in evidence], sub(answer)
+        return swap_names(question, evidence, answer, self.rng, self.common, self.rare)
 
     def _qa(self):
         ex = self.rng.choices(self.examples, weights=self.weights)[0]
@@ -202,22 +239,30 @@ class Batches:
         return np.array(xs), np.array(ys), np.array(ms, dtype=np.float32)
 
 
-def evaluate(net: TinyTransformer, held_out: list[dict], limit: int = 50) -> dict:
-    """On questions it never trained on: how often its answers pass the evidence
-    check, and how often they say exactly what the reference answer says."""
+def evaluate(net: TinyTransformer, held_out: list[dict], limit: int = 50,
+             common: set[str] | None = None, rare: list[str] | None = None) -> dict:
+    """On questions it never trained on: how often its answers pass the evidence check and
+    how often they say exactly what the reference says. Done twice: as written, and with
+    every name replaced by one it has never seen, which is the honest test of reading."""
     from .writer import grounded
     norm = lambda t: re.sub(r"\W+", " ", t.lower()).strip()
-    passed = same = 0
-    samples = []
-    for ex in held_out[:limit]:
-        draft = net.write(ex["question"], ex["evidence"], max_new=200)
-        ok, _ = grounded(draft, ex["evidence"] + [ex["question"]])
-        passed += ok
-        same += norm(draft) == norm(ex["answer"])
-        samples.append((ex["question"], draft, ok))
-    n = min(limit, len(held_out))
-    return {"grounded": passed / n if n else None, "same": same / n if n else None,
-            "checked": n, "samples": samples[:5]}
+    results = {}
+    for label, rng in (("seen", None), ("new", random.Random(7))):
+        passed = same = 0
+        samples = []
+        for ex in held_out[:limit]:
+            q, ev, ans = ex["question"], ex["evidence"], ex["answer"]
+            if rng is not None:
+                q, ev, ans = swap_names(q, ev, ans, rng, common or set(), rare or [], real=0.3)
+            draft = net.write(q, ev, max_new=200)
+            ok, _ = grounded(draft, ev + [q])
+            passed += ok
+            same += norm(draft) == norm(ans)
+            samples.append((q, draft, ok))
+        n = min(limit, len(held_out))
+        results[label] = {"grounded": passed / n if n else None, "same": same / n if n else None,
+                          "checked": n, "samples": samples[:4]}
+    return results
 
 
 def main(argv: list[str] | None = None) -> TinyTransformer:
@@ -238,7 +283,7 @@ def main(argv: list[str] | None = None) -> TinyTransformer:
     ap.add_argument("--tokens", choices=("bpe", "char"), default="bpe",
                     help="bpe: word pieces like GPT (default); char: one character per token")
     ap.add_argument("--vocab", type=int, default=2048, help="BPE vocabulary size")
-    ap.add_argument("--swap", type=float, default=0.5,
+    ap.add_argument("--swap", type=float, default=0.85,
                     help="share of examples whose names are swapped for made-up words")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args(argv)
@@ -320,11 +365,16 @@ def main(argv: list[str] | None = None) -> TinyTransformer:
         raise SystemExit("The numpy copy doesn't match the trained model; not saving it.")
 
     if held_out:
-        report = evaluate(net, held_out)
-        net.meta["grounded_rate"], net.meta["same_rate"] = report["grounded"], report["same"]
-        print(f"Held-out check on {report['checked']} unseen questions: {report['grounded']:.0%} "
-              f"used only words from their evidence; {report['same']:.0%} matched the reference answer.")
-        for q, draft, ok in report["samples"]:
+        common, rare = name_stats(corpus + [e["answer"] for e in examples])
+        report = evaluate(net, held_out, common=common, rare=rare)
+        seen, new = report["seen"], report["new"]
+        net.meta.update({"grounded_rate": seen["grounded"], "same_rate": seen["same"],
+                         "new_names_grounded": new["grounded"], "new_names_same": new["same"]})
+        print(f"Held-out questions ({seen['checked']}): {seen['grounded']:.0%} used only words from "
+              f"their evidence; {seen['same']:.0%} matched the reference answer.")
+        print(f"Same questions with NEW names it has never seen: {new['grounded']:.0%} grounded; "
+              f"{new['same']:.0%} matched the reference. (This is the real test of reading evidence.)")
+        for q, draft, ok in new["samples"]:
             print(f"  Q: {q}\n  A: {draft}  [{'grounded' if ok else 'NOT grounded'}]")
     net.save(args.out)
     print(f"Saved {args.out}. Load it with: /writer load {os.path.basename(args.out)}")

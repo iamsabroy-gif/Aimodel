@@ -18,9 +18,10 @@ from __future__ import annotations
 
 import argparse
 import os
+import random
 
 from .model import LearningModel
-from .writer import export_training_data
+from .writer import build_examples, write_training_files
 
 # name, class, where it lives, what it eats
 ANIMALS = [
@@ -100,6 +101,18 @@ COUNTRIES = [
     ("Canada", "Ottawa", "North America"), ("Mexico", "Mexico City", "North America"),
     ("Cuba", "Havana", "North America"), ("Australia", "Canberra", "Oceania"),
     ("New Zealand", "Wellington", "Oceania"),
+]
+
+# singular, plural, class: written as "Cats are mammals." (a different sentence form from ANIMALS)
+PLURAL_ANIMALS = [
+    ("cat", "cats", "mammal"), ("dog", "dogs", "mammal"), ("rat", "rats", "mammal"),
+    ("bat", "bats", "mammal"), ("seal", "seals", "mammal"), ("otter", "otters", "mammal"),
+    ("shark", "sharks", "fish"), ("eel", "eels", "fish"), ("trout", "trout", "fish"),
+    ("eagle", "eagles", "bird"), ("robin", "robins", "bird"), ("pigeon", "pigeons", "bird"),
+    ("snake", "snakes", "reptile"), ("lizard", "lizards", "reptile"), ("tortoise", "tortoises", "reptile"),
+    ("ant", "ants", "insect"), ("beetle", "beetles", "insect"), ("fly", "flies", "insect"),
+    ("newt", "newts", "amphibian"), ("toad", "toads", "amphibian"), ("tarantula", "tarantulas", "arachnid"),
+    ("scorpion", "scorpions", "arachnid"),
 ]
 
 # a cause and the "why" question that asks for it
@@ -214,6 +227,71 @@ def country_questions() -> list[str]:
     return out
 
 
+# --- many made-up people, so "my dog is called Milo" appears in many forms ------------------
+PETS = ["dog", "cat", "parrot", "rabbit", "hamster", "turtle"]
+PET_NAMES = ["Rex", "Milo", "Luna", "Max", "Bella", "Coco", "Oscar", "Daisy", "Charlie", "Ruby", "Leo", "Nala"]
+PET_LOOKS = {
+    "dog": ["a golden retriever", "a small brown dog", "a friendly beagle", "a tiny terrier", "a black labrador"],
+    "cat": ["a grey cat", "a black cat", "a ginger cat", "a white cat", "a fluffy cat"],
+    "parrot": ["a green parrot", "a red parrot", "a colourful parrot"],
+    "rabbit": ["a white rabbit", "a brown rabbit", "a fluffy rabbit"],
+    "hamster": ["a golden hamster", "a fluffy hamster", "a tiny hamster"],
+    "turtle": ["a small turtle", "a green turtle", "an old turtle"],
+}
+PET_LOVES = {
+    "dog": ["swimming", "chasing balls", "running in the park", "digging"],
+    "cat": ["sleeping", "napping", "chasing mice", "sitting in the sun"],
+    "parrot": ["singing", "talking", "eating fruit"],
+    "rabbit": ["eating carrots", "digging", "hopping in the garden"],
+    "hamster": ["running on a wheel", "eating seeds", "napping"],
+    "turtle": ["swimming", "basking in the sun", "eating lettuce"],
+}
+RELATIVES = ["sister", "brother", "cousin", "aunt", "uncle", "friend", "neighbour", "grandmother"]
+CITIES = ["Lisbon", "Toronto", "Nairobi", "Osaka", "Lima", "Oslo", "Cairo", "Sydney", "Pune", "Berlin",
+          "Madrid", "Seoul", "Dublin", "Prague", "Accra", "Hanoi", "Quito", "Vienna", "Perth", "Lagos"]
+HOBBIES = ["painting", "cycling", "chess", "gardening", "baking", "reading", "hiking", "swimming",
+           "photography", "cooking", "knitting", "running", "drawing", "dancing"]
+FAVOURITES = [("food", "rice", "filling"), ("food", "pasta", "tasty"), ("food", "soup", "warm"),
+              ("colour", "blue", "calm"), ("colour", "green", "fresh"), ("season", "spring", "mild"),
+              ("season", "autumn", "colourful"), ("sport", "football", "fun to play with friends"),
+              ("sport", "tennis", "fast"), ("programming language", "Python", "easy to read"),
+              ("programming language", "Go", "simple"), ("drink", "tea", "soothing"),
+              ("animal", "owl", "wise"), ("subject", "history", "interesting")]
+PERSONAS = 40
+
+
+def persona(rng: random.Random) -> tuple[str, list[str]]:
+    """One made-up person's notes and the questions to ask about them."""
+    pet, pet_name = rng.choice(PETS), rng.choice(PET_NAMES)
+    relative, relative2 = rng.sample(RELATIVES, 2)
+    hobbies = rng.sample(HOBBIES, 2)
+    kind, value, why = rng.choice(FAVOURITES)
+    notes = [f"My {pet} is called {pet_name}.",
+             f"{pet_name} is {rng.choice(PET_LOOKS[pet])} who loves {rng.choice(PET_LOVES[pet])}.",
+             f"My {relative} lives in {rng.choice(CITIES)}.", f"My {relative2} lives in {rng.choice(CITIES)}.",
+             f"I like {hobbies[0]}.", f"I like {hobbies[1]}.",
+             f"My favourite {kind} is {value} because it is {why}."]
+    questions = [f"What is my {pet} called?", f"Tell me about my {pet}", f"What is {pet_name}?",
+                 f"Where does my {relative} live?", f"Where does my {relative2} live?", "What do I like?",
+                 f"What is my favourite {kind}?"]
+    return " ".join(notes), questions
+
+
+def _plural(word: str) -> str:
+    return word if word == "fish" else word + "s"
+
+
+def plural_animals_text() -> str:
+    return " ".join(f"{p.capitalize()} are {_plural(c)}." for _s, p, c in PLURAL_ANIMALS)
+
+
+def plural_questions() -> list[str]:
+    out = []
+    for s, p, c in PLURAL_ANIMALS:
+        out += [f"What are {p}?", f"Is {_article(s)} {s} {_article(c)} {c}?", f"Is {_article(s)} {s} an animal?"]
+    return out
+
+
 def build_sample_model(seed: int = 0) -> tuple[LearningModel, list[str]]:
     """A model that has read the starter facts, and the practice questions to ask it."""
     m = LearningModel(seed=seed)
@@ -221,13 +299,14 @@ def build_sample_model(seed: int = 0) -> tuple[LearningModel, list[str]]:
     m.add_document(KINDS, "animal_kinds.txt")
     m.add_document(" ".join(f"{cap} is the capital of {c}. {c} is a country in {cont}."
                             for c, cap, cont in COUNTRIES), "countries.txt")
+    m.add_document(plural_animals_text(), "animals_plural.txt")
     m.add_document(" ".join(c for c, _ in CAUSES), "science.txt")
     m.add_document("\n".join(t for t, _ in STEPS), "howto.txt")
     m.add_document(FACTS, "facts.txt")
     m.add_document(PERSONA, "sample_person.txt")
     m.answer_log = [{"q": q, "evidence": ev, "template": ans, "final": ans, "by": "templates",
                      "rating": "bad", "correction": ans} for q, ev, ans in CORRECTIONS]
-    questions = (animal_questions() + country_questions() + [q for _, q in CAUSES]
+    questions = (animal_questions() + plural_questions() + country_questions() + [q for _, q in CAUSES]
                  + [q for _, q in STEPS] + FACT_QUESTIONS + PERSONA_QUESTIONS)
     return m, questions
 
@@ -241,15 +320,36 @@ writer_data.jsonl  one example per line: question, evidence (the sentences the a
 corpus.txt         every sentence the model read, for language practice.
 
 The facts are generic samples (animals, countries, science, how-tos, Python, a made-up
-person), not your data. A writer trained on this learns to word answers from evidence.
+person plus 40 more made-up people), not your data. A writer trained on this learns to word answers
+from evidence.
 Train with:  python -m aimodel.train_writer --data sample_data --out writer.npz
 Rebuild with: python -m aimodel.sample_data --out sample_data
 """
 
 
-def export_sample(folder: str, seed: int = 0) -> dict:
-    model, questions = build_sample_model(seed)
-    info = export_training_data(model, folder, extra_questions=questions, exam_questions=False)
+def build_sample(seed: int = 0, people: int = PERSONAS) -> tuple[list[dict], list[str]]:
+    """The whole starter set: (examples, corpus lines)."""
+    core, questions = build_sample_model(seed)
+    examples = build_examples(core, extra_questions=questions, exam_questions=False)
+    lines = [k["text"] for k in core.knowledge]
+    seen = {(e["question"].lower(), e["answer"]) for e in examples}
+    rng = random.Random(seed)
+    for _ in range(people):  # each person is a separate model, so their notes never clash
+        notes, person_questions = persona(rng)
+        p = LearningModel(seed=seed)
+        p.add_document(notes, "sample_person.txt")
+        for e in build_examples(p, extra_questions=person_questions, exam_questions=False):
+            if (e["question"].lower(), e["answer"]) not in seen:
+                seen.add((e["question"].lower(), e["answer"]))
+                examples.append(e)
+        lines += [k["text"] for k in p.knowledge]
+    rng.shuffle(examples)
+    return examples, lines
+
+
+def export_sample(folder: str, seed: int = 0, people: int = PERSONAS) -> dict:
+    examples, lines = build_sample(seed, people)
+    info = write_training_files(folder, examples, lines)
     with open(os.path.join(folder, "ABOUT.txt"), "w", encoding="utf-8") as f:
         f.write(ABOUT)
     return info

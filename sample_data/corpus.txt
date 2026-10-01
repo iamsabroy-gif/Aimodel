@@ -220,6 +220,28 @@ Canberra is the capital of Australia.
 Australia is a country in Oceania.
 Wellington is the capital of New Zealand.
 New Zealand is a country in Oceania.
+Cats are mammals.
+Dogs are mammals.
+Rats are mammals.
+Bats are mammals.
+Seals are mammals.
+Otters are mammals.
+Sharks are fish.
+Eels are fish.
+Trout are fish.
+Eagles are birds.
+Robins are birds.
+Pigeons are birds.
+Snakes are reptiles.
+Lizards are reptiles.
+Tortoises are reptiles.
+Ants are insects.
+Beetles are insects.
+Flies are insects.
+Newts are amphibians.
+Toads are amphibians.
+Tarantulas are arachnids.
+Scorpions are arachnids.
 The sky is blue because air scatters blue light more than red light.
 Ice floats on water because ice is less dense than liquid water.
 Plants need sunlight because they use light energy to make food.
@@ -275,3 +297,283 @@ I like building small things.
 My favourite programming language is Python because it is easy to read.
 My brother lives in Toronto.
 I like long walks.
+My rabbit is called Oscar.
+Oscar is a brown rabbit who loves digging.
+My sister lives in Seoul.
+My cousin lives in Perth.
+I like photography.
+I like swimming.
+My favourite season is autumn because it is colourful.
+My cat is called Charlie.
+Charlie is a fluffy cat who loves chasing mice.
+My cousin lives in Vienna.
+My grandmother lives in Lagos.
+I like chess.
+I like drawing.
+My favourite food is pasta because it is tasty.
+My cat is called Bella.
+Bella is a white cat who loves sleeping.
+My brother lives in Seoul.
+My friend lives in Prague.
+I like cycling.
+I like knitting.
+My favourite season is spring because it is mild.
+My parrot is called Ruby.
+Ruby is a colourful parrot who loves talking.
+My aunt lives in Toronto.
+My uncle lives in Vienna.
+I like swimming.
+I like dancing.
+My favourite subject is history because it is interesting.
+My dog is called Milo.
+Milo is a golden retriever who loves digging.
+My neighbour lives in Madrid.
+My friend lives in Sydney.
+I like dancing.
+I like drawing.
+My favourite programming language is Go because it is simple.
+My turtle is called Coco.
+Coco is a small turtle who loves eating lettuce.
+My brother lives in Accra.
+My grandmother lives in Nairobi.
+I like cooking.
+I like gardening.
+My favourite colour is blue because it is calm.
+My dog is called Coco.
+Coco is a golden retriever who loves running in the park.
+My grandmother lives in Vienna.
+My sister lives in Cairo.
+I like baking.
+I like photography.
+My favourite colour is green because it is fresh.
+My hamster is called Charlie.
+Charlie is a fluffy hamster who loves eating seeds.
+My uncle lives in Perth.
+My aunt lives in Sydney.
+I like cycling.
+I like cooking.
+My favourite animal is owl because it is wise.
+My parrot is called Luna.
+Luna is a colourful parrot who loves talking.
+My aunt lives in Hanoi.
+My neighbour lives in Nairobi.
+I like chess.
+I like painting.
+My favourite programming language is Python because it is easy to read.
+My dog is called Leo.
+Leo is a black labrador who loves digging.
+My cousin lives in Quito.
+My brother lives in Pune.
+I like painting.
+I like cycling.
+My favourite drink is tea because it is soothing.
+My hamster is called Max.
+Max is a fluffy hamster who loves eating seeds.
+My aunt lives in Hanoi.
+My friend lives in Seoul.
+I like cooking.
+I like hiking.
+My favourite programming language is Python because it is easy to read.
+My dog is called Coco.
+Coco is a small brown dog who loves chasing balls.
+My brother lives in Lisbon.
+My aunt lives in Pune.
+I like cooking.
+I like knitting.
+My favourite season is spring because it is mild.
+My dog is called Nala.
+Nala is a tiny terrier who loves swimming.
+My aunt lives in Osaka.
+My cousin lives in Lima.
+I like drawing.
+I like chess.
+My favourite season is spring because it is mild.
+My turtle is called Max.
+Max is an old turtle who loves eating lettuce.
+My sister lives in Nairobi.
+My neighbour lives in Lisbon.
+I like cooking.
+I like knitting.
+My favourite sport is tennis because it is fast.
+My dog is called Leo.
+Leo is a tiny terrier who loves swimming.
+My aunt lives in Seoul.
+My uncle lives in Osaka.
+I like dancing.
+I like cooking.
+My favourite food is pasta because it is tasty.
+My dog is called Ruby.
+Ruby is a tiny terrier who loves chasing balls.
+My sister lives in Toronto.
+My brother lives in Lisbon.
+I like chess.
+I like running.
+My favourite food is pasta because it is tasty.
+My hamster is called Oscar.
+Oscar is a golden hamster who loves napping.
+My brother lives in Berlin.
+My neighbour lives in Seoul.
+I like baking.
+I like cycling.
+My favourite colour is blue because it is calm.
+My rabbit is called Luna.
+Luna is a white rabbit who loves hopping in the garden.
+My sister lives in Dublin.
+My uncle lives in Cairo.
+I like swimming.
+I like painting.
+My favourite programming language is Python because it is easy to read.
+My parrot is called Coco.
+Coco is a colourful parrot who loves singing.
+My grandmother lives in Toronto.
+My neighbour lives in Oslo.
+I like cooking.
+I like chess.
+My favourite drink is tea because it is soothing.
+My cat is called Coco.
+Coco is a black cat who loves sleeping.
+My uncle lives in Hanoi.
+My sister lives in Prague.
+I like cooking.
+I like swimming.
+My favourite programming language is Go because it is simple.
+My hamster is called Charlie.
+Charlie is a tiny hamster who loves eating seeds.
+My uncle lives in Lima.
+My friend lives in Vienna.
+I like reading.
+I like hiking.
+My favourite subject is history because it is interesting.
+My turtle is called Rex.
+Rex is a small turtle who loves eating lettuce.
+My grandmother lives in Pune.
+My friend lives in Lima.
+I like cycling.
+I like reading.
+My favourite drink is tea because it is soothing.
+My cat is called Daisy.
+Daisy is a fluffy cat who loves napping.
+My friend lives in Berlin.
+My uncle lives in Dublin.
+I like baking.
+I like knitting.
+My favourite season is spring because it is mild.
+My turtle is called Oscar.
+Oscar is a green turtle who loves swimming.
+My brother lives in Sydney.
+My sister lives in Sydney.
+I like cooking.
+I like gardening.
+My favourite drink is tea because it is soothing.
+My turtle is called Daisy.
+Daisy is a green turtle who loves swimming.
+My neighbour lives in Dublin.
+My friend lives in Perth.
+I like knitting.
+I like cooking.
+My favourite subject is history because it is interesting.
+My rabbit is called Leo.
+Leo is a fluffy rabbit who loves eating carrots.
+My sister lives in Accra.
+My brother lives in Quito.
+I like swimming.
+I like cycling.
+My favourite colour is green because it is fresh.
+My rabbit is called Charlie.
+Charlie is a brown rabbit who loves eating carrots.
+My sister lives in Prague.
+My grandmother lives in Cairo.
+I like swimming.
+I like reading.
+My favourite colour is green because it is fresh.
+My hamster is called Leo.
+Leo is a fluffy hamster who loves napping.
+My brother lives in Prague.
+My neighbour lives in Madrid.
+I like running.
+I like chess.
+My favourite food is rice because it is filling.
+My dog is called Max.
+Max is a black labrador who loves swimming.
+My sister lives in Cairo.
+My friend lives in Osaka.
+I like drawing.
+I like painting.
+My favourite subject is history because it is interesting.
+My hamster is called Leo.
+Leo is a golden hamster who loves running on a wheel.
+My aunt lives in Hanoi.
+My neighbour lives in Dublin.
+I like baking.
+I like dancing.
+My favourite drink is tea because it is soothing.
+My turtle is called Milo.
+Milo is a small turtle who loves basking in the sun.
+My sister lives in Lima.
+My cousin lives in Quito.
+I like swimming.
+I like drawing.
+My favourite animal is owl because it is wise.
+My turtle is called Leo.
+Leo is a small turtle who loves swimming.
+My friend lives in Toronto.
+My sister lives in Cairo.
+I like dancing.
+I like chess.
+My favourite colour is green because it is fresh.
+My turtle is called Bella.
+Bella is an old turtle who loves eating lettuce.
+My friend lives in Lagos.
+My cousin lives in Hanoi.
+I like cooking.
+I like painting.
+My favourite subject is history because it is interesting.
+My turtle is called Leo.
+Leo is an old turtle who loves swimming.
+My grandmother lives in Cairo.
+My friend lives in Dublin.
+I like hiking.
+I like reading.
+My favourite subject is history because it is interesting.
+My hamster is called Bella.
+Bella is a fluffy hamster who loves eating seeds.
+My sister lives in Nairobi.
+My brother lives in Madrid.
+I like chess.
+I like baking.
+My favourite season is spring because it is mild.
+My hamster is called Rex.
+Rex is a fluffy hamster who loves eating seeds.
+My sister lives in Dublin.
+My cousin lives in Vienna.
+I like chess.
+I like dancing.
+My favourite programming language is Python because it is easy to read.
+My cat is called Bella.
+Bella is a ginger cat who loves napping.
+My brother lives in Quito.
+My aunt lives in Nairobi.
+I like running.
+I like gardening.
+My favourite food is rice because it is filling.
+My parrot is called Oscar.
+Oscar is a colourful parrot who loves talking.
+My friend lives in Hanoi.
+My cousin lives in Madrid.
+I like hiking.
+I like cycling.
+My favourite food is pasta because it is tasty.
+My parrot is called Milo.
+Milo is a green parrot who loves talking.
+My grandmother lives in Madrid.
+My sister lives in Lima.
+I like running.
+I like swimming.
+My favourite season is autumn because it is colourful.
+My cat is called Leo.
+Leo is a grey cat who loves napping.
+My neighbour lives in Sydney.
+My grandmother lives in Toronto.
+I like knitting.
+I like cycling.
+My favourite food is pasta because it is tasty.
