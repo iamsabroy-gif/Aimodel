@@ -18,11 +18,12 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections import Counter
 
 from . import reasoning as rsn
 from .reasoning import stem
-from .text import keywords, tokenize
+from .text import keywords, split_sentences, tokenize
 
 # Words the writer may use to connect sentences without them being in the evidence.
 GLUE = {"also", "addition", "top", "first", "then", "after", "finally", "reason", "because",
@@ -61,6 +62,97 @@ def grounded(answer: str, sources: list[str]) -> tuple[bool, list[str]]:
     if any(toks[i] == toks[i + 1] == toks[i + 2] for i in range(len(toks) - 2)):
         return False, ["(repeats itself)"]
     return not missing, missing
+
+
+_VERDICT = re.compile(r"^\W*(yes|no|probably yes)\b", re.I)
+_MAIN_CLAUSE = re.compile(r",?\s+(?:so|which|who|because|since|while)\s+", re.I)
+
+
+def verdict(text: str) -> str | None:
+    """'Yes', 'No' or 'Probably yes' if the answer opens with one."""
+    m = _VERDICT.match(text)
+    return m.group(1).lower() if m else None
+
+
+def repeats(text: str) -> bool:
+    """A repeated phrase ("in Africa in Africa") or a repeated sentence."""
+    toks = tokenize(text)
+    for n in range(2, 5):
+        if any(toks[i:i + n] == toks[i + n:i + 2 * n] for i in range(len(toks) - 2 * n + 1)):
+            return True
+    # the same sentence again, even reworded ("You like it. You also like it.")
+    sentences = [frozenset(_words(x)) or frozenset(tokenize(x)) for x in split_sentences(text, min_words=2)]
+    return len(sentences) != len(set(sentences))
+
+
+def _clauses(draft: str):
+    """The statements to verify: each sentence's main clause and the clauses joined by 'and'.
+    What follows 'so' or 'which' is a conclusion or an aside, not a claim to check."""
+    for sentence in split_sentences(draft, min_words=2):
+        main = _MAIN_CLAUSE.split(rsn.clean(sentence), 1)[0]
+        yield from re.split(r",\s+(?:and|but)\s+", main)
+
+
+def _words(text: str) -> set[str]:
+    return {stem(w) for w in keywords(text)}
+
+
+def _same_fact(a: dict, b: dict) -> bool:
+    be = ("be", "be called")
+    return (rsn.head(a["subj"]) == rsn.head(b["subj"]) and a["neg"] == b["neg"]
+            and (a["rel"] == b["rel"] or (a["rel"] in be and b["rel"] in be))
+            and _words(a["obj"]) <= _words(b["obj"]))
+
+
+def supported(draft: str, evidence: list[str]) -> tuple[bool, list[str]]:
+    """Is every statement in `draft` backed by a statement in the evidence?
+
+    Statements are read as facts (subject, verb, object, yes/no), so "the sheep eats
+    grass" does not pass for "the grass eats sheep" and "whales are not fish" does not
+    pass for "whales are fish", even though they use the same words. A statement about
+    something the evidence never states as a fact is left to the word check.
+    """
+    known = [f for e in evidence for part in split_sentences(e, min_words=2)
+             for f in [rsn.extract_fact(rsn.clean(part))] if f]
+    wrong, subject = [], None
+    for part in _clauses(draft):
+        fact = rsn.extract_fact(part, topic=subject)
+        if not fact:
+            continue
+        subject = fact["subj"]
+        who = rsn.head(fact["subj"])
+        about = [k for k in known if rsn.head(k["subj"]) == who]
+        # Backed if the evidence says it. Not backed if the evidence says something else about
+        # this subject, or only mentions it as the thing acted on ("the sheep eats GRASS" is
+        # no evidence that grass eats anything).
+        acted_on = who in {w for k in known for w in _words(k["obj"])}
+        if (about and not any(_same_fact(fact, k) for k in about)) or (not about and acted_on):
+            wrong.append(part.strip())
+    return not wrong, wrong
+
+
+def check_draft(draft: str, evidence: list[str], question: str = "",
+                reference: str | None = None) -> tuple[bool, list[str]]:
+    """Should this draft be shown? Returns (ok, problems). Every check must pass:
+    only evidence words, no repeats, every statement backed by the evidence, and (given
+    the template answer as `reference`) the same yes/no and nothing important left out."""
+    problems = []
+    ok, missing = grounded(draft, evidence + [question])
+    if not ok:
+        problems.append("words not in the evidence: " + ", ".join(missing[:5]))
+    if repeats(draft):
+        problems.append("it repeats itself")
+    claims_ok, wrong = supported(draft, evidence)
+    if not claims_ok:
+        problems.append("a statement the evidence doesn't support: " + "; ".join(wrong[:2]))
+    if reference is not None:
+        if verdict(draft) != verdict(reference):
+            problems.append(f"it says {verdict(draft) or 'nothing'} where the answer is "
+                            f"{verdict(reference) or 'not a yes/no'}")
+        whole, left_out = complete(draft, reference)
+        if not whole:
+            problems.append("it left things out: " + ", ".join(left_out[:5]))
+    return not problems, problems
 
 
 def complete(draft: str, reference: str, share: float = 0.8) -> tuple[bool, list[str]]:
@@ -165,17 +257,13 @@ class WriterMixin:
         final, by = answer, "templates"
         if self.writer is not None and self.writer_enabled and evidence:
             draft = self.writer.write(question, evidence)
-            ok, missing = grounded(draft, evidence + [question])
-            whole, left_out = complete(draft, answer)
-            if ok and whole:
+            ok, problems = check_draft(draft, evidence, question, reference=answer)
+            if ok:
                 final, by = rsn.sentence(draft), "transformer"
-                note = "Worded by my transformer; every word checked against the evidence"
-            elif not ok:
-                note = (f"My transformer's draft used words not in the evidence "
-                        f"({', '.join(missing[:5])}), so I used my template answer")
+                note = "Worded by my transformer; every statement checked against the evidence"
             else:
-                note = (f"My transformer's draft left things out ({', '.join(left_out[:5])}), "
-                        "so I used my fuller template answer")
+                note = (f"My transformer's draft was rejected ({'; '.join(problems)}), "
+                        "so I used my template answer")
             trace = trace + [{"kind": "writer", "text": note, "source": "my transformer"}]
         if learn:
             self.answer_log.append({"q": question, "evidence": evidence, "template": answer,

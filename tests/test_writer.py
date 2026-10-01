@@ -9,7 +9,8 @@ import numpy as np
 
 from aimodel import LearningModel
 from aimodel.transformer import END, PAD, UNK, A, E, Q, BPETokenizer, CharTokenizer, TinyTransformer
-from aimodel.writer import build_examples, complete, grounded, writer_evidence
+from aimodel.writer import (build_examples, check_draft, complete, grounded, repeats, supported,
+                            verdict, writer_evidence)
 
 try:
     import torch  # noqa: F401
@@ -159,7 +160,58 @@ class TestGrounding(unittest.TestCase):
         self.assertEqual(writer_evidence(trace), ["You live in Pune.", "I think, therefore I am."])
 
 
+class TestSafetyCheck(unittest.TestCase):
+    EV = ["Whales are not fish.", "The sheep eats grass.", "The moose eats plants.", "The seal eats fish.",
+          "Cats are mammals.", "Mammals are warm-blooded animals.", "You like painting."]
+
+    def check(self, draft, reference):
+        return check_draft(draft, self.EV, "question", reference=reference)
+
+    def test_a_wrong_yes_or_no_is_rejected(self):
+        ok, problems = self.check("Yes. Whales are not fish.", "No. Whales are not fish.")
+        self.assertFalse(ok)
+        self.assertIn("yes", problems[0])
+        self.assertTrue(self.check("No. Whales are not fish.", "No. Whales are not fish.")[0])
+        self.assertEqual((verdict("Probably yes. A cat is an animal."), verdict("Cats are mammals.")),
+                         ("probably yes", None))
+
+    def test_the_same_words_with_the_wrong_meaning_are_rejected(self):
+        self.assertFalse(self.check("The grass eats sheep.", "The sheep eats grass.")[0])      # roles swapped
+        self.assertFalse(self.check("The seal eats plants.", "The moose eats plants.")[0])     # wrong animal
+        self.assertFalse(self.check("Whales are fish.", "Whales are not fish.")[0])            # polarity dropped
+        for good in ("The sheep eats grass.", "The moose eats plants."):
+            self.assertTrue(self.check(good, good)[0])
+
+    def test_reasoning_steps_and_asides_are_allowed(self):
+        chain = "Yes. Cats are mammals, and mammals are warm-blooded animals, so a cat is an animal."
+        self.assertTrue(self.check(chain, chain)[0])
+        aside = "Cats are mammals, which are warm-blooded animals."
+        self.assertTrue(self.check(aside, aside)[0])
+
+    def test_repeats_are_rejected_even_when_reworded(self):
+        self.assertTrue(repeats("Mount Kenya is a mountain in Africa in Africa."))
+        self.assertTrue(repeats("You like painting. You also like painting."))
+        self.assertFalse(repeats("The moose is a mammal. It also lives in forests."))
+        self.assertFalse(self.check("You like painting. You also like painting.", "You like painting.")[0])
+
+    def test_supported_reads_statements_as_facts(self):
+        self.assertEqual(supported("The sheep eats grass.", self.EV), (True, []))
+        ok, wrong = supported("The grass eats sheep.", self.EV)
+        self.assertFalse(ok)
+        self.assertEqual(wrong, ["The grass eats sheep."])
+        self.assertTrue(supported("Hello there, welcome.", self.EV)[0])  # nothing to verify
+
+
 class TestWriterInModel(unittest.TestCase):
+    def test_a_wrong_yes_never_reaches_you(self):
+        m = LearningModel(seed=0)
+        m.add_document("Whales are not fish. Fish are animals that live in water.", "notes.txt")
+        m.writer = StubWriter("Yes. Whales are not fish.")
+        reply, _ = m.respond("Is a whale a fish?")
+        self.assertTrue(reply.startswith("No."))
+        self.assertIn("rejected", m.last_trace[-1]["text"])
+        self.assertEqual(m.answer_log[-1]["by"], "templates")
+
     def test_a_grounded_draft_is_used(self):
         m = model()
         m.writer = StubWriter("Yes, cats are mammals and mammals are warm-blooded animals, so cats are animals")

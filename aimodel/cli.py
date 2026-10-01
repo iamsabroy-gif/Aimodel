@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import urllib.error
 
 from .model import LearningModel
@@ -99,6 +100,13 @@ def main(argv: list[str] | None = None) -> None:
 
     model = LearningModel.load(args.brain)
     model.notify = lambda message: print("ai>", message)
+    sibling = os.path.join(os.path.dirname(os.path.abspath(args.brain)), "writer.npz")
+    if model.writer is None and os.path.exists(sibling):  # a writer you trained, next to your brain
+        try:
+            net = model.load_writer(sibling)
+            print(f"Using your trained writer ({net.n_params:,} parameters) from {sibling}.")
+        except (OSError, ValueError, KeyError) as e:
+            print(f"(Found {sibling} but couldn't load it: {e})")
     online = not args.offline
     s = model.stats()
     print(f"Loaded brain from {args.brain}: {s['memories']} memories, {s['facts']} facts, "

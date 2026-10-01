@@ -165,10 +165,13 @@ question -> memory, facts, reasoning, study -> evidence -> [ transformer writes 
 - **It reads instead of reciting.** During training, names in the examples are
   randomly swapped for made-up words (consistently in question, evidence and
   answer). Memorising never pays, so it learns to copy facts *from the evidence*.
-- **It can't make things up or leave things out.** Every draft is checked: each
-  meaningful word must appear in the question or the evidence, and it must say
-  (almost) everything the template answer says. Otherwise the template answer is
-  used. `/why` says which writer worded the answer, or why a draft was rejected.
+- **Every draft is checked before you see it** (`writer.check_draft`). It is rejected, and the
+  template answer used instead, unless: every meaningful word is in the question or the evidence;
+  nothing is repeated; every statement, read as a fact (subject, verb, object, yes/no), is backed by
+  the evidence (so "the grass eats sheep" fails for "the sheep eats grass", and "whales are fish" fails
+  for "whales are not fish"); a yes/no answer says the same yes or no as the template; and nothing
+  important is left out. `/why` says which writer worded the answer, or why a draft was rejected.
+  This is a guard against the failures I found while testing, not a proof of correctness.
 - **The model** (`transformer.py`): token and position embeddings, then layers of
   masked multi-head self-attention and a feed-forward network, each with layer
   norm and a residual connection, then a softmax over the vocabulary. It writes one
@@ -186,16 +189,33 @@ question -> memory, facts, reasoning, study -> evidence -> [ transformer writes 
 5. Later, after teaching it more: export again and train with
    `--resume writer.npz` so it keeps what it already learned.
 
-**What to expect.** In a test on this repo (a CPU, the smallest size, 6,000
-steps, about 650 examples about made-up animals), the writer answered questions
-about animals it had never seen: 97% of its answers used only words from their
-evidence and 90% were word-for-word what the template would say. Its misses
-left things out rather than inventing them. Before name swapping, a higher
-learning rate and enough steps, the same model fluently wrote about the *wrong*
-animal every time: the evidence check caught all of those. At first it imitates
-the templates. It moves beyond them through your `/good` ratings and `/bad`
-corrections, which count two and three times as much in training. The Kaggle
-notebook trains the larger `base` size on a GPU (about 3M parameters).
+**Starter data.** `sample_data/` holds a ready-made training set in exactly the format `/export`
+writes (about 790 examples: animals, countries, causes, how-tos, Python, 40 made-up people, and
+examples of `/bad` corrections). Rebuild it with `python -m aimodel.sample_data --out sample_data`.
+A writer trained on it learns the *skill* of wording an answer from evidence; the facts are only
+examples. Your own `/export` data teaches it your wording.
+
+**What to expect (measured).** A 3-million-parameter writer trained on the starter data on a Kaggle GPU
+(about 5 minutes), tested on questions it never trained on:
+
+| Test | Passes the full safety check |
+|---|---|
+| Held-out questions from the training data | 98% |
+| The same questions with names it has never seen | 94% |
+| New animals, same sentence shapes | 90% (36 of 40; every miss was one garbled name) |
+| New sentence shapes and topics | 43% (6 of 14) |
+| Unusual names (Kuala Lumpur, Zephyr, cross-stitch) | 63% (5 of 8) |
+
+Everything that failed was caught and replaced by the template answer: garbled names ("basp"),
+a hallucinated animal, a wrong "Yes", run-ons and repeats. So the writer helps most on sentence
+shapes like the ones it trained on, and falls back to templates elsewhere. Training on your own
+`/export` data (your sentence shapes) is what widens that. It starts out imitating the templates;
+it moves beyond them through your `/good` ratings and `/bad` corrections, which count two and three
+times as much in training. An earlier version looked excellent (94%) but scored 0% on new names; the
+fix was training that swaps nearly every name for a made-up or different word, so memorising never helps.
+
+**Use a trained writer:** put `writer.npz` next to your brain (it is picked up automatically), or type
+`/writer load writer.npz`.
 
 | Command | What it does |
 |---|---|

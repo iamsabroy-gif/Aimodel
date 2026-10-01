@@ -241,10 +241,10 @@ class Batches:
 
 def evaluate(net: TinyTransformer, held_out: list[dict], limit: int = 50,
              common: set[str] | None = None, rare: list[str] | None = None) -> dict:
-    """On questions it never trained on: how often its answers pass the evidence check and
-    how often they say exactly what the reference says. Done twice: as written, and with
+    """On questions it never trained on: how often its answers pass the full safety check
+    (see `writer.check_draft`) and how often they say exactly what the reference says. Done twice: as written, and with
     every name replaced by one it has never seen, which is the honest test of reading."""
-    from .writer import grounded
+    from .writer import check_draft
     norm = lambda t: re.sub(r"\W+", " ", t.lower()).strip()
     results = {}
     for label, rng in (("seen", None), ("new", random.Random(7))):
@@ -255,7 +255,7 @@ def evaluate(net: TinyTransformer, held_out: list[dict], limit: int = 50,
             if rng is not None:
                 q, ev, ans = swap_names(q, ev, ans, rng, common or set(), rare or [], real=0.3)
             draft = net.write(q, ev, max_new=200)
-            ok, _ = grounded(draft, ev + [q])
+            ok, _ = check_draft(draft, ev, q, reference=ans)
             passed += ok
             same += norm(draft) == norm(ans)
             samples.append((q, draft, ok))
@@ -372,7 +372,7 @@ def main(argv: list[str] | None = None) -> TinyTransformer:
                          "new_names_grounded": new["grounded"], "new_names_same": new["same"]})
         print(f"Held-out questions ({seen['checked']}): {seen['grounded']:.0%} used only words from "
               f"their evidence; {seen['same']:.0%} matched the reference answer.")
-        print(f"Same questions with NEW names it has never seen: {new['grounded']:.0%} grounded; "
+        print(f"Same questions with NEW names it has never seen: {new['grounded']:.0%} passed; "
               f"{new['same']:.0%} matched the reference. (This is the real test of reading evidence.)")
         for q, draft, ok in new["samples"]:
             print(f"  Q: {q}\n  A: {draft}  [{'grounded' if ok else 'NOT grounded'}]")
