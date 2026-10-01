@@ -51,7 +51,7 @@ class TestKnowledge(unittest.TestCase):
 
     def test_unrelated_questions_are_not_answered(self):
         self.assertIsNone(self.m.respond("who invented the telephone?")[0])
-        self.assertIsNone(self.m.respond("hello there")[0])
+        self.assertIsNone(self.m.respond("zorp flimflam wibble")[0])
 
     def test_web_lookup_only_when_enabled(self):
         self.assertIsNone(self.m.respond("What is photosynthesis?")[0])

@@ -60,7 +60,8 @@ Your brain files work anywhere: train on Kaggle, keep using them on your phone.
 
 When you type something, it:
 
-1. **Checks what you taught it:** replies you taught it, matched by meaning.
+1. **Checks what you taught it:** replies you taught it, matched by meaning. Then
+   **greetings** ("hello", "thanks", "bye"), which need no knowledge.
 2. **Remembers facts you state:** "My sister lives in Delhi" becomes a fact.
    Later, "Where does my sister live?" gets "Your sister lives in Delhi."
 3. **Reasons over what it knows** (your files, pages it read, facts) and
@@ -68,6 +69,22 @@ When you type something, it:
 4. **Looks things up:** for a question it can't answer, it reads Wikipedia
    and tries again (if web lookups are on).
 5. **Asks you:** if it still doesn't know, you teach it.
+
+### Greetings and small talk
+
+It already knows how to be polite: hello, good morning/afternoon/evening/night, how are you,
+what's up, who are you, what can you do, thanks, sorry, bye and more (25 kinds, plus a few
+greetings from other languages). Several replies per kind, so it doesn't repeat itself.
+
+- **Strict matching:** after ignoring filler ("there", "so much", your name), the whole message
+  must equal a known greeting, so "What is the name of the capital?" is never mistaken for small talk.
+  It also copes with "heyyy", "hii", "thx", "byeee". "Hi, what is Rex?" greets you and answers.
+- **It learns your name:** "My name is Sam" (or "call me Sam", "I'm Sam") and it greets you by name.
+- **You train it:** `/greet namaste => Namaste {name}!` teaches a phrase or one more reply for a
+  phrase, in any language (`{name}` becomes your name). `/greet` lists what it knows;
+  `/greet forget <phrase>` removes one. Replies you taught with `/teach` always win.
+- **It learns your taste:** `/good` makes the reply it just gave more likely, `/bad` less likely
+  (and lets you type the reply you wanted).
 
 ### Reasoning and its own explanations
 
@@ -193,6 +210,8 @@ notebook trains the larger `base` size on a GPU (about 3M parameters).
 |---|---|
 | *(just type)* | chat or ask a question |
 | `/teach hi => Hello!` | teach a reply directly |
+| `/greet [<phrase> => <reply>]` | list greetings it knows / teach a greeting (`{name}` = your name) |
+| `/greet forget <phrase>` | forget a greeting you taught |
 | `/good` | trust the last reply more (a good researched answer becomes a memory) |
 | `/bad` | trust it less and give a better answer |
 | `/read <file or url>` | learn from a text file or web page |

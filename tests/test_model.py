@@ -14,7 +14,7 @@ class TestLearningModel(unittest.TestCase):
 
     def test_unknown_input_returns_none(self):
         self.assertEqual(self.m.respond("quantum chromodynamics")[0], None)
-        self.assertEqual(LearningModel().respond("hi")[0], None)
+        self.assertEqual(LearningModel().respond("zorp flimflam wibble")[0], None)
 
     def test_matches_similar_wording(self):
         self.assertEqual(self.m.respond("What's your name?")[0], "I'm your tiny AI.")

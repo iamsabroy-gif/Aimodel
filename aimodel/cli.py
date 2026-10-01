@@ -20,6 +20,14 @@ Teaching:
   /bad                            my last reply was wrong (you can correct me)
   /forget <text>                  forget replies whose prompt contains <text>
 
+Greetings (hello, how are you, thanks, bye - I already know many):
+  /greet                          show the greetings I know, your name and your greetings
+  /greet <phrase> => <reply>      teach me a greeting or one more reply (any language;
+                                  {name} = your name). e.g. /greet namaste => Namaste {name}!
+  /greet forget <phrase>          forget a greeting you taught me
+  Tell me "My name is Sam" and I'll greet you by name. /good or /bad after a greeting
+  teaches me which replies you like.
+
 Your data and the internet:
   /read <file or url>             learn from a text file or web page
   /web <question>                 look something up on Wikipedia and answer
@@ -59,7 +67,7 @@ _NET_ERRORS = (urllib.error.URLError, TimeoutError, OSError, ValueError)
 
 def _show_reply(model: LearningModel, reply: str, confidence: float) -> None:
     print(f"ai> {reply}")
-    if model.last_source == "noted":
+    if model.last_source in ("noted", "smalltalk"):
         return
     if model.last_source == "memory":
         where = "memory"
@@ -188,7 +196,7 @@ def main(argv: list[str] | None = None) -> None:
                     continue
                 print(f"ai> To answer '{model.last_query}' I used:")
                 labels = {"fact": "fact", "evidence": "evidence", "inference": "reasoning",
-                          "memory": "memory", "writer": "writer"}
+                          "memory": "memory", "writer": "writer", "smalltalk": "greeting"}
                 for i, step in enumerate(model.last_trace, 1):
                     print(f"  {i}. [{labels.get(step['kind'], step['kind'])}] {step['text']}")
                     detail = f"source: {step['source']}"
@@ -233,6 +241,30 @@ def main(argv: list[str] | None = None) -> None:
                     print(f"ai> {reply}")
                 else:
                     print("ai> I couldn't find a definition for that.")
+            elif cmd == "/greet":
+                phrase, sep, reply = arg.partition("=>")
+                if not arg:
+                    info = model.greeting_summary()
+                    kinds = ", ".join(info["built-in"])
+                    print(f"ai> I know {len(info['built-in'])} kinds of small talk: {kinds}.")
+                    print(f"    Your name: {info['name'] or 'not told yet (say: My name is ...)'}")
+                    for item in info["custom"]:
+                        print(f"    you taught me: {item['phrase']} => {item['reply']}")
+                    if not info["custom"]:
+                        print("    Teach me your own: /greet <phrase> => <reply>")
+                elif arg.startswith("forget "):
+                    n = model.forget_greeting(arg[7:])
+                    print(f"ai> Forgot {n} greeting{'s' if n != 1 else ''}.")
+                elif not sep:
+                    print("usage: /greet <phrase> => <reply>    (or /greet, /greet forget <phrase>)")
+                    continue
+                else:
+                    try:
+                        model.add_greeting(phrase, reply)
+                    except ValueError as e:
+                        print(f"ai> I can't use that: {e}")
+                        continue
+                    print(f"ai> Learned. When you say '{phrase.strip()}' I'll say '{reply.strip()}'.")
             elif cmd == "/export":
                 info = model.export_training_data(arg or "writer_data")
                 print(f"ai> Saved {info['examples']} training examples and {info['corpus lines']} "

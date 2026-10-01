@@ -24,6 +24,8 @@ The model learns from you and from what it reads:
    (see `study.py`).
 8. **Writer** - a tiny transformer you train on Kaggle words the answers,
    checked against the evidence (see `writer.py`, `transformer.py`).
+9. **Greetings** - hello, how are you, thanks, bye: built in, in your name,
+   and trainable in your own words (see `smalltalk.py`).
 
 Everything is saved (a JSON "brain" plus the networks' weights in .npz).
 """
@@ -44,6 +46,7 @@ from . import web
 from .neural import WordEmbeddings
 from .ranker import FeedbackRanker
 from .reasoning import stem
+from .smalltalk import SmallTalkMixin
 from .study import GENERIC as _GENERIC, WEAK_WORDS, StudyMixin, bare as _bare
 from .text import TfidfIndex, keywords, looks_like_question, split_sentences, tokenize
 from .vectors import PretrainedVectors
@@ -73,7 +76,7 @@ _CONNECTORS = ("Also, ", "On top of that, ", "In addition, ")
 _STEPS = ("First, ", "Then, ", "After that, ", "Finally, ")
 
 
-class LearningModel(StudyMixin, WriterMixin):
+class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
     # When the network knows this many words, it is rebuilt with bigger vectors.
     GROWTH = ((8000, 96), (30000, 160))
 
@@ -107,6 +110,7 @@ class LearningModel(StudyMixin, WriterMixin):
         self.last_trace: list[dict] = []
         self._init_study()
         self._init_writer()
+        self._init_smalltalk()
 
     # ------------------------------------------------------------------ memory
     def learn(self, prompt: str, response: str) -> None:
@@ -168,6 +172,14 @@ class LearningModel(StudyMixin, WriterMixin):
 
         ranked = self.rank(text)
         best = ranked[0][0] if ranked else 0.0
+        # Greetings ("Hi, how are you?"). Replies you taught me always win over built-in ones.
+        talk = None if (ranked and best >= self.threshold) else self._small_talk(text)
+        if talk and talk["rest"]:  # "Hi, what is Rex?": greet, then answer the rest
+            reply, confidence = self.respond(talk["rest"], use_web=use_web, notify=notify, learn=learn)
+            if reply is not None:
+                self.last_reply = f"{talk['reply']} {reply}"
+                return self.last_reply, confidence
+            talk = None  # more than a greeting that I can't answer: handle the whole message
         if ranked and best >= self.threshold:
             idx = ranked[0][1]
             mem = self.memories[idx]
@@ -178,11 +190,18 @@ class LearningModel(StudyMixin, WriterMixin):
                                 "matched": sorted(set(keywords(text)) & set(keywords(mem["prompt"])))}]
             if learn:
                 self.reinforce(mem, 0.1)
+        elif talk is not None:
+            self.last_reply, self.last_source, best = talk["reply"], "smalltalk", 1.0
+            self._last_talk = talk["templates"]
+            self.last_trace = [{"kind": "smalltalk", "source": "my greetings",
+                                "text": "Recognised a greeting: " + ", ".join(talk["intents"])}]
         elif not looks_like_question(text):
             self._updated = []
-            noted = self.note(text) if learn else []
+            noted = (self._learn_name(text) or self.note(text)) if learn else []
             if noted:
                 self.last_reply = "Got it: " + " ".join(rsn.state(f) for f in noted)
+                if any(" ".join(f["subj"].lower().split()) == "my name" for f in noted):
+                    self.last_reply += " Nice to meet you!"
                 if self._updated:
                     self.last_reply += (" (Updated - before, I had: "
                                         + " ".join(rsn.state(f) for f in self._updated) + ")")
@@ -219,6 +238,9 @@ class LearningModel(StudyMixin, WriterMixin):
 
     def feedback(self, good: bool) -> bool:
         """Reward or penalise the last response. Returns False if nothing to rate."""
+        if self.last_source == "smalltalk":
+            self._rate_talk(good)  # say it more (or less) often
+            return True
         if self.last_source == "memory" and self.last_match is not None:
             mem = self.memories[self.last_match]
             mem["weight"] += 0.5 if good else -1.0
@@ -756,6 +778,8 @@ class LearningModel(StudyMixin, WriterMixin):
             "writer": (f"transformer, {self.writer.n_params:,} parameters"
                        + ("" if self.writer_enabled else " (off)")) if self.writer else "templates",
             "conversations logged for training": len(self.answer_log),
+            "greetings you taught": len(self.smalltalk_custom),
+            "your name": self.user_name() or "(not told yet)",
             "style vocabulary": len({w for c in self.chain.values() for w in c} - {END}),
         }
 
@@ -772,6 +796,7 @@ class LearningModel(StudyMixin, WriterMixin):
                       "gaps": self.gaps, "exam_log": self.exam_log,
                       "interests": dict(self.interests.most_common(300))},
             "writer": {"log": self.answer_log, "enabled": self.writer_enabled},
+            "smalltalk": {"custom": self.smalltalk_custom, "weights": self.smalltalk_weights},
             "chain": {k: dict(v) for k, v in self.chain.items()},
         }
 
@@ -791,6 +816,9 @@ class LearningModel(StudyMixin, WriterMixin):
         writer = data.get("writer", {})
         model.answer_log = writer.get("log", [])
         model.writer_enabled = writer.get("enabled", True)
+        talk = data.get("smalltalk", {})
+        model.smalltalk_custom = talk.get("custom", [])
+        model.smalltalk_weights = talk.get("weights", {})
         model.facts = data.get("facts", [])
         model.ranker = FeedbackRanker.from_dict(data.get("ranker"))
         if not model.facts and model.knowledge:  # brain from before facts existed
