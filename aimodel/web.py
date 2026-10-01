@@ -118,3 +118,26 @@ def wikipedia(query: str, limit: int = 2, get=http_get,
                 url = "https://en.wikipedia.org/wiki/" + urllib.parse.quote(page["title"].replace(" ", "_"))
                 results.append((page["title"], text[:max_chars], url))
     return results
+
+
+DICT_API = "https://api.dictionaryapi.dev/v2/entries/en/"
+
+
+def dictionary(word: str, get=http_get, limit: int = 3) -> list[tuple[str, str]]:
+    """Look a word up in a free online dictionary. Returns [(part of speech, definition), ...]."""
+    try:
+        data = json.loads(get(DICT_API + urllib.parse.quote(word.lower())))
+    except urllib.error.HTTPError as e:
+        if e.code == 404:  # the word isn't in the dictionary
+            return []
+        raise
+    except ValueError:  # not a dictionary answer
+        return []
+    out = []
+    for entry in data if isinstance(data, list) else []:
+        for meaning in entry.get("meanings", []):
+            for d in meaning.get("definitions", [])[:1]:
+                text = str(d.get("definition", "")).strip()
+                if text:
+                    out.append((meaning.get("partOfSpeech", ""), text))
+    return out[:limit]

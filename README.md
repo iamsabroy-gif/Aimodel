@@ -102,6 +102,24 @@ from, and what it inferred. `/facts <topic>` lists what it knows.
   "glove6b50dtxt" dataset and run
   `/vectors /kaggle/input/glove6b50dtxt/glove.6B.50d.txt`.
 
+### Study mode: learning like a child
+
+Reading isn't learning. A child sorts what matters, looks up words, gets
+tested, forgets what they never use and sleeps on the rest. `study.py` does the same:
+
+| A child... | The model... |
+|---|---|
+| Doesn't memorise a whole book | **Sorts by importance.** A long web page is studied only for its important sentences (the opening, definitions, ideas that recur, your interests, the question you asked). The rest go on a **shelf** and are looked up when a question needs them |
+| Remembers what is used and confirmed, forgets the rest | **Memory strength.** Every sentence has a strength: it rises when used, confirmed (`/good`) or recalled in an exam and fades if never used. After about two weeks unused web text moves to the shelf. **What you taught or gave it is never forgotten** |
+| Reviews at growing intervals | **Spaced repetition.** Each correct recall doubles the wait before that fact is due again; a miss brings it back tomorrow |
+| Looks up words in a dictionary | **Dictionary.** Unknown words in your question are looked up and learned (`/define <word>`) |
+| Takes exams | **`/quiz`**: it writes questions from its facts, answers them *from memory* (no peeking at the source) and grades itself. `/quiz me` quizzes you |
+| Sleeps on it | **`/sleep`** consolidates: fades unused things, merges repeats, settles contradictions (keeps what you said over the web, asks you when it can't tell) and replays what it studied. It also runs by itself after a day away |
+| Updates what they know | Tell it "My sister lives in Mumbai" and it replaces "Delhi" (but "I like tea" and "I like coffee" are both kept) |
+| Gets curious about what it missed | Questions it couldn't answer and exam misses become **study goals**. `/curious` reads up on them (shelf, dictionary, web) and checks it can now answer. `/study` does a whole school day: curiosity, an exam, then sleep |
+
+`/progress` shows how it's going, including exam scores over time.
+
 ## Commands
 
 | Command | What it does |
@@ -116,6 +134,12 @@ from, and what it inferred. `/facts <topic>` lists what it knows.
 | `/why` | show the reasoning behind the last answer |
 | `/facts [topic]` | list facts it has learned |
 | `/vectors <file> [max words]` | load pretrained word vectors (GloVe / fastText) |
+| `/quiz [n]` / `/quiz me [n]` | it takes an exam and grades itself / it quizzes you |
+| `/sleep` | consolidate: forget unused, merge repeats, settle contradictions, replay |
+| `/curious` | study its open questions (shelf, dictionary, web) |
+| `/study` | a full session: be curious, take an exam, sleep |
+| `/define <word>` | look a word up in the dictionary |
+| `/progress` | how studying is going |
 | `/train [epochs]` | extra neural network training on everything it knows |
 | `/similar <word>` | words the network thinks are related |
 | `/gen [words]` | generate text in your writing style |
@@ -134,6 +158,11 @@ you> Is a cat a living thing?
 ai> Yes. Cats are mammals, and mammals are warm-blooded animals, and animals are
     living things, so a cat is a living thing.
     (from reasoning over 1 source, confidence 0.80; /why, /good or /bad)
+you> /quiz 3
+  [OK ] What are cats?
+         I said: Cats are mammals, which are warm-blooded animals.
+  ...
+ai> Self-exam: 3/3 correct.
 you> /why
 ai> To answer 'Is a cat a living thing?' I used:
   1. [fact] Cats are mammals.
@@ -167,6 +196,9 @@ reply, confidence = m.respond("What is photosynthesis?", use_web=True)
 print(reply, m.last_trace)                   # answer + reasoning steps
 m.respond("My sister lives in Delhi")         # it learns facts you state
 m.load_vectors("glove.6B.50d.txt")           # optional word knowledge
+exam = m.quiz(5)                             # it quizzes itself: exam["score"], exam["results"]
+m.sleep()                                    # consolidate (forget unused, merge, replay)
+m.study_session(use_web=True)                # curiosity + exam + sleep
 m.feedback(good=True)
 m.save("brain.json")
 ```

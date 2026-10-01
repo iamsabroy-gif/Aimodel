@@ -71,7 +71,10 @@ _BAD_INSIDE = {"that", "which", "who", "whom", "whose", "when", "where", "if", "
                "although", "while"}
 _DETERMINERS = {"a", "an", "the", "my", "your", "his", "her", "our", "their", "its", "this",
                 "that", "these", "those", "some", "any", "one"}
-_BAD_END = _DETERMINERS | {"of", "in", "on", "at", "for", "to", "with", "by", "and", "or", "not"}
+_BAD_END = _DETERMINERS | {"of", "in", "on", "at", "for", "to", "with", "by", "and", "or", "not",
+                           "through", "from", "into", "about", "over", "under", "between", "during",
+                           "than", "as", "like", "per", "via", "within", "without", "across", "onto",
+                           "upon", "against", "among", "around", "after", "before", "since", "until"}
 _PRONOUNS = {"it", "they", "this", "these", "he", "she"}
 _STOP_OBJ = {"which", "who", "whom", "because", "while", "whereas", "although", "but",
              "since", "whose", "though", "however"}

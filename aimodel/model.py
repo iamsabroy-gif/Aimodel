@@ -19,6 +19,9 @@ The model learns from you and from what it reads:
    facts in the model's own words (see `reasoning.py`).
 6. **Feedback network** - a second small neural network that learns from
    /good and /bad which evidence makes a good answer (see `ranker.py`).
+7. **Study mode** - memory strength and forgetting, importance sorting, a
+   dictionary, self-exams, sleep-like consolidation and curiosity
+   (see `study.py`).
 
 Everything is saved (a JSON "brain" plus the networks' weights in .npz).
 """
@@ -39,6 +42,7 @@ from . import web
 from .neural import WordEmbeddings
 from .ranker import FeedbackRanker
 from .reasoning import stem
+from .study import GENERIC as _GENERIC, WEAK_WORDS, StudyMixin, bare as _bare
 from .text import TfidfIndex, keywords, looks_like_question, split_sentences, tokenize
 from .vectors import PretrainedVectors
 
@@ -55,22 +59,14 @@ def vectors_path(path: str) -> str:
     return os.path.splitext(path)[0] + ".vectors.npz"
 
 
-# Words too general to connect two facts ("values", "things"...).
-_GENERIC = {"value", "thing", "way", "number", "part", "type", "kind", "example", "item", "time",
-            "use", "lot", "set", "case", "point", "form", "end", "result", "other", "same",
-            "system", "process", "method", "area", "level", "group", "field"}
 # "Here is an example:" - introduces something that isn't there (code, a table).
 _INTRO = re.compile(r"\b(example|following|below|follows|like this|shown)\b[^.!?]*:\s*$", re.I)
-def _bare(phrase: str) -> str:
-    """'the Rex' -> 'rex': a phrase without its determiners, for exact matching."""
-    return " ".join(w for w in tokenize(phrase) if w not in {"a", "an", "the"})
-
 
 _CONNECTORS = ("Also, ", "On top of that, ", "In addition, ")
 _STEPS = ("First, ", "Then, ", "After that, ", "Finally, ")
 
 
-class LearningModel:
+class LearningModel(StudyMixin):
     # When the network knows this many words, it is rebuilt with bigger vectors.
     GROWTH = ((8000, 96), (30000, 160))
 
@@ -82,7 +78,7 @@ class LearningModel:
         self.memories: list[dict] = []   # {"prompt", "response", "weight"}
         self.knowledge: list[dict] = []  # {"text", "source", "pos"}
         self.facts: list[dict] = []      # {"subj", "rel", "verb", "obj", "neg", "source", "text"}
-        self._known = set()
+        self._known: dict[str, dict] = {}  # sentence -> its knowledge/shelf entry
         # context tuple (as "a b" string key) -> Counter of next words
         self.chain: dict[str, Counter] = defaultdict(Counter)
         self.neural = WordEmbeddings(seed=seed or 0)
@@ -102,6 +98,7 @@ class LearningModel:
         self.last_reply: str | None = None
         self.last_source: str | None = None  # "memory" | "knowledge" | "noted" | None
         self.last_trace: list[dict] = []
+        self._init_study()
 
     # ------------------------------------------------------------------ memory
     def learn(self, prompt: str, response: str) -> None:
@@ -117,6 +114,7 @@ class LearningModel:
             self.memories.append({"prompt": prompt, "response": response, "weight": 1.0})
         self.observe(prompt)
         self.observe(response)
+        self._note_interest(prompt + " " + response)
         self.neural.train([tokenize(prompt) + tokenize(response)], epochs=10, min_pairs=1000)
 
     def _similarity(self, tfidf: np.ndarray, neural: np.ndarray) -> np.ndarray:
@@ -128,8 +126,9 @@ class LearningModel:
         """Return (score, memory_index) pairs for taught memories, best first."""
         if not self.memories:
             return []
-        prompts = [tokenize(m["prompt"]) for m in self.memories]
-        query = tokenize(text)
+        # Match on meaningful words only: otherwise "what is ..." matches every question.
+        prompts = [keywords(m["prompt"]) or tokenize(m["prompt"]) for m in self.memories]
+        query = keywords(text) or tokenize(text)
         tfidf = np.array(TfidfIndex(prompts).scores(query))
         vecs = self.neural.sentence_vectors(prompts + [query])
         meaning = (vecs[:-1] @ vecs[-1]) * self.neural.maturity
@@ -142,15 +141,20 @@ class LearningModel:
         scored.sort(reverse=True)
         return scored
 
-    def respond(self, text: str, use_web: bool = False, notify=None) -> tuple[str | None, float]:
+    def respond(self, text: str, use_web: bool = False, notify=None,
+                learn: bool = True) -> tuple[str | None, float]:
         """Reply to `text`. Returns (response or None if unsure, confidence).
 
         Tries taught memories first. Statements about facts are remembered.
-        Questions are answered by reasoning over your data and anything it
-        has read, and (if `use_web`) by looking the question up on Wikipedia.
+        Questions are answered by reasoning over what it has studied; if that
+        fails it looks on its shelf, then (if `use_web`) in the dictionary and
+        on Wikipedia. With `learn=False` (used for exams) nothing is learned
+        from the exchange and no outside help is used.
         """
         notify = notify or self.notify
-        self.observe(text)
+        if learn:
+            self.observe(text)
+            self._note_interest(text)
         self.last_query, self.last_reply, self.last_source = text, None, None
         self.last_match, self.last_trace = None, []
 
@@ -164,36 +168,61 @@ class LearningModel:
             self.last_trace = [{"kind": "memory", "text": f"{mem['prompt']} -> {mem['response']}",
                                 "source": "taught by you", "score": best,
                                 "matched": sorted(set(keywords(text)) & set(keywords(mem["prompt"])))}]
+            if learn:
+                self.reinforce(mem, 0.1)
         elif not looks_like_question(text):
-            noted = self.note(text)
+            self._updated = []
+            noted = self.note(text) if learn else []
             if noted:
                 self.last_reply = "Got it: " + " ".join(rsn.state(f) for f in noted)
+                if self._updated:
+                    self.last_reply += (" (Updated - before, I had: "
+                                        + " ".join(rsn.state(f) for f in self._updated) + ")")
                 self.last_source, best = "noted", 1.0
                 self.last_trace = [{"kind": "fact", "text": rsn.state(f), "source": "you said"}
                                    for f in noted]
         else:
             answer = self.explain(text)
-            if answer is None and use_web:
-                if notify:
-                    notify("Searching the web...")
-                if self.search_web(text):
+            if answer is None and learn and self.recall(text):  # look in the books on the shelf
+                answer = self.explain(text)
+            if answer is None and learn and use_web:
+                if self.define_unknown(text):  # words I've never seen: ask the dictionary
                     answer = self.explain(text)
+                if answer is None:
+                    if notify:
+                        notify("Searching the web...")
+                    if self.search_web(text):
+                        answer = self.explain(text)
+                        if answer is None and self.recall(text):
+                            answer = self.explain(text)
             if answer is not None:
                 self.last_reply, best, self.last_trace = answer
                 self.last_source = "knowledge"
+                if learn:
+                    self._mark_used(self.last_trace)
+                    self._close_gap(text)
+            elif learn:
+                self._add_gap(text, "unanswered")
 
-        self.neural.train([tokenize(text)], epochs=1)
+        if learn:
+            self.neural.train([tokenize(text)], epochs=1)
         return self.last_reply, best
 
     def feedback(self, good: bool) -> bool:
         """Reward or penalise the last response. Returns False if nothing to rate."""
         if self.last_source == "memory" and self.last_match is not None:
-            self.memories[self.last_match]["weight"] += 0.5 if good else -1.0
+            mem = self.memories[self.last_match]
+            mem["weight"] += 0.5 if good else -1.0
+            if good:
+                self.reinforce(mem, 0.3, recalled=True)
+            else:
+                self.weaken(mem, 0.4)
             return True
         if self.last_source == "knowledge":
             evidence = [t["features"] for t in self.last_trace if "features" in t]
             if evidence:  # teach the feedback network what good evidence looks like
                 self.ranker.train(evidence, [1.0 if good else 0.0] * len(evidence))
+            self._grade_trace(good)  # and strengthen/weaken what the answer was built from
             if good:  # a good researched answer becomes a trusted memory
                 self.learn(self.last_query, self.last_reply)
                 self.last_match, self.last_source = len(self.memories) - 1, "memory"
@@ -214,27 +243,55 @@ class LearningModel:
         return before - len(self.memories)
 
     # --------------------------------------------------------------- knowledge
-    def add_document(self, text: str, source: str, topic: str | None = None) -> int:
-        """Learn from a block of text. Returns the number of new sentences.
+    def add_document(self, text: str, source: str, topic: str | None = None,
+                     focus: str | None = None) -> int:
+        """Learn from a block of text. Returns the number of new sentences studied.
 
-        `topic` (e.g. an article title) lets "It is ..." sentences become facts.
+        Short texts and your own files are studied in full. Long web pages are
+        sorted by importance: the best sentences are studied and the rest go on
+        the shelf for later (see `last_read`). `topic` (e.g. an article title)
+        lets "It is ..." sentences become facts; `focus` is the question the
+        text is being read for.
         """
-        new, last_subject = [], topic
+        fresh, parsed, promote, last_subject = [], {}, [], topic
         for pos, s in enumerate(split_sentences(text, min_words=2 if source == "you said" else 3)):
-            fact = rsn.extract_fact(s, topic=last_subject)
+            hint = last_subject
+            fact = rsn.extract_fact(s, topic=hint)
             if fact:
                 last_subject = topic or fact["subj"]
-            if s in self._known:
+            known = self._known.get(s)
+            if known is not None:
+                if known.get("shelved"):  # read again: it recurs, so it matters
+                    known["again"] = known.get("again", 0) + 1
+                    promote.append(known)
+                else:
+                    self.reinforce(known, 0.1)
                 continue
-            self._known.add(s)
-            self.knowledge.append({"text": s, "source": source, "pos": pos})
-            if fact:
-                self.facts.append({**fact, "source": source, "text": s})
-            new.append(s)
-        if new:
-            self.neural.train([tokenize(s) for s in new], epochs=5, min_pairs=3000)
+            entry = {"text": s, "source": source, "pos": pos}
+            if hint:
+                entry["hint"] = hint
+            fresh.append(entry)
+            parsed[s] = fact
+
+        keep = self._choose_keep(fresh, source, focus)
+        studied = [e for i, e in enumerate(fresh) if i in keep]
+        for i, e in enumerate(fresh):
+            if i in keep:
+                self._remember(e, parsed[e["text"]])
+            else:
+                e["shelved"] = True
+                self._known[e["text"]] = e
+                self.shelf.append(e)
+        if promote:
+            self.shelf = [e for e in self.shelf if not any(e is p for p in promote)]
+            for e in promote:
+                self._remember(e)
+            studied += promote
+        self.last_read = {"kept": len(studied), "shelved": len(fresh) - len(keep)}
+        if studied:
+            self.neural.train([tokenize(e["text"]) for e in studied], epochs=5, min_pairs=3000)
             self._maybe_grow()
-        return len(new)
+        return len(studied)
 
     def note(self, text: str) -> list[dict]:
         """Remember facts you state in chat ("My sister lives in Delhi")."""
@@ -242,7 +299,10 @@ class LearningModel:
         if not any(rsn.extract_fact(s) for s in split_sentences(text, min_words=2)):
             return []
         self.add_document(text, "you said")
-        return self.facts[before:]
+        new = self.facts[before:]
+        for fact in new:
+            self._supersede(fact)  # "lives in Mumbai" replaces "lives in Delhi"
+        return new
 
     def _maybe_grow(self) -> bool:
         """Rebuild the network with bigger word vectors once it knows enough words."""
@@ -275,7 +335,7 @@ class LearningModel:
         terms = " ".join(keywords(query)) or query
         added = 0
         for title, text, url in web.wikipedia(terms, get=self.fetch):
-            added += self.add_document(text, url, topic=title)
+            added += self.add_document(text, url, topic=title, focus=query)
         return added
 
     def _knowledge_index(self):
@@ -327,7 +387,7 @@ class LearningModel:
             if index is None:
                 return 0.0
             return max((index.idf.get(v, 99.0) for v in wanted[w]), default=99.0)
-        return max(wanted, key=rarity)
+        return max([w for w in wanted if w not in WEAK_WORDS] or wanted, key=rarity)
 
     def answer_from_knowledge(self, text: str, max_sentences: int = 3, bonus=None):
         """Gather evidence sentences for a question.
@@ -419,6 +479,12 @@ class LearningModel:
             if not chosen or (cov - covered and score >= 0.5 * cands[0][0]):
                 chosen.append(f)
                 covered |= cov
+        if chosen:  # a list of answers: "I like tea" and "I like coffee"
+            top = chosen[0]
+            for score, cov, f in cands:
+                if (len(chosen) < 4 and f not in chosen and score >= 0.9 * cands[0][0]
+                        and f["rel"] == top["rel"] and _bare(f["subj"]) == _bare(top["subj"])):
+                    chosen.append(f)
         coverage = len(covered) / len(wanted)
         if coverage < 0.5 or self._key_word(wanted) not in covered:
             return [], 0.0
@@ -438,11 +504,13 @@ class LearningModel:
             for f in self.facts:
                 if f["neg"] and rsn.head(f["subj"]) == a and rsn.head(f["obj"]) == b:
                     return (f"No. {rsn.state(f)}", 0.9,
-                            [{"kind": "fact", "text": rsn.state(f), "source": f["source"]}])
+                            [{"kind": "fact", "text": rsn.state(f), "source": f["source"],
+                              "sentence": f["text"]}])
             path = rsn.isa_chain(self.facts, a, b)
             if path:
                 links = [rsn.state(f).rstrip(".") for f in path]
-                steps = [{"kind": "fact", "text": rsn.state(f), "source": f["source"]} for f in path]
+                steps = [{"kind": "fact", "text": rsn.state(f), "source": f["source"],
+                          "sentence": f["text"]} for f in path]
                 # "The sperm whale is a mammal" says something about one kind of whale,
                 # so for "a whale" it's a good guess, not a proof.
                 narrower = {stem(w) for w in tokenize(_bare(path[0]["subj"]))} - {stem(w) for w in tokenize(_bare(subj))}
@@ -484,7 +552,7 @@ class LearningModel:
         parts, steps, used = [], [], set()
         if facts:
             first = facts[0]
-            parts.append(rsn.state(first))
+            parts.append(self._say(first))
             steps.append({"kind": "fact", "text": rsn.state(first), "source": first["source"],
                           "sentence": first["text"]})
             used.add(first["text"])
@@ -494,7 +562,7 @@ class LearningModel:
                     continue
                 same = rsn.head(f["subj"]) == subject
                 parts.append(rsn.state(f, subject=rsn.pronoun(first), also=True) if same
-                             else _CONNECTORS[len(parts) % 3] + self._lower(rsn.state(f)))
+                             else _CONNECTORS[len(parts) % 3] + self._lower(self._say(f)))
                 steps.append({"kind": "fact", "text": rsn.state(f), "source": f["source"],
                               "sentence": f["text"]})
                 used.add(f["text"])
@@ -531,6 +599,17 @@ class LearningModel:
                 if step.get("sentence") in features:
                     step["features"] = features[step["sentence"]]
         return " ".join(parts), confidence, steps
+
+    def _say(self, fact: dict) -> str:
+        """A fact as a sentence. If the fact lost part of its sentence (a trailing
+        'who loves swimming'), say the whole sentence instead of a cut-off one."""
+        text = rsn.state(fact)
+        plain = rsn.clean(fact["text"]).rstrip(".!?: ")
+        if len(plain) <= len(text.rstrip(".")) + 8:
+            return text
+        if rsn.is_personal(fact) or fact["source"] == "you said":
+            plain = rsn.flip_person(plain)
+        return rsn.sentence(plain)
 
     def _linked_fact(self, fact: dict, used: set) -> dict | None:
         """A fact about something mentioned in `fact`'s object (one reasoning hop)."""
@@ -604,13 +683,17 @@ class LearningModel:
     def _lower(self, text: str) -> str:
         return rsn.lower_first(text, self._names())
 
-    def _corpus(self) -> list[list[str]]:
+    def _corpus(self, limit: int | None = None) -> list[list[str]]:
+        """Everything I've studied as token lists (the `limit` strongest sentences if given)."""
         corpus = [tokenize(m["prompt"]) + tokenize(m["response"]) for m in self.memories]
-        return corpus + [tokenize(k["text"]) for k in self.knowledge]
+        entries = self.knowledge
+        if limit and len(entries) > limit:
+            entries = sorted(entries, key=lambda k: -k.get("s", 0.8))[:limit]
+        return corpus + [tokenize(k["text"]) for k in entries]
 
-    def retrain(self, epochs: int = 5) -> float | None:
-        """Give the neural network extra practice on everything it knows."""
-        return self.neural.train(self._corpus(), epochs=epochs, new=False, min_pairs=5000)
+    def retrain(self, epochs: int = 5, limit: int | None = None) -> float | None:
+        """Give the neural network extra practice on what it knows."""
+        return self.neural.train(self._corpus(limit), epochs=epochs, new=False, min_pairs=5000)
 
     # ------------------------------------------------------------------- style
     def observe(self, text: str) -> None:
@@ -651,6 +734,8 @@ class LearningModel:
             "knowledge sentences": len(self.knowledge),
             "knowledge sources": len({k["source"] for k in self.knowledge}),
             "facts": len(self.facts),
+            "shelf sentences": len(self.shelf),
+            "open questions": len(self.gaps),
             "neural vocabulary": len(self.neural),
             "neural size (dimensions)": self.neural.dim,
             "feedback examples": self.ranker.examples,
@@ -667,6 +752,9 @@ class LearningModel:
             "knowledge": self.knowledge,
             "facts": self.facts,
             "ranker": self.ranker.to_dict(),
+            "study": {"day": self.day, "last_sleep": self.last_sleep, "shelf": self.shelf,
+                      "gaps": self.gaps, "exam_log": self.exam_log,
+                      "interests": dict(self.interests.most_common(300))},
             "chain": {k: dict(v) for k, v in self.chain.items()},
         }
 
@@ -677,7 +765,12 @@ class LearningModel:
                     order=data.get("order", 2))
         model.memories = data.get("memories", [])
         model.knowledge = data.get("knowledge", [])
-        model._known = {k["text"] for k in model.knowledge}
+        study = data.get("study", {})
+        model.shelf = study.get("shelf", [])
+        model._known = {k["text"]: k for k in model.knowledge + model.shelf}
+        model.day, model.last_sleep = study.get("day", 0), study.get("last_sleep")
+        model.gaps, model.exam_log = study.get("gaps", []), study.get("exam_log", [])
+        model.interests = Counter(study.get("interests", {}))
         model.facts = data.get("facts", [])
         model.ranker = FeedbackRanker.from_dict(data.get("ranker"))
         if not model.facts and model.knowledge:  # brain from before facts existed

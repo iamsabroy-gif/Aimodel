@@ -6,6 +6,7 @@ import argparse
 import urllib.error
 
 from .model import LearningModel
+from .reports import run_user_quiz, show_curiosity, show_exam, show_progress, show_sleep
 
 HELP = """\
 Just type to chat or ask questions. I answer from what you taught me, from
@@ -25,6 +26,15 @@ Your data and the internet:
   /online on|off                  allow automatic web lookups (now: {online})
   /why                            show my reasoning for the last answer
   /facts [topic]                  show facts I've learned (about a topic)
+
+Studying (how I learn like a child):
+  /quiz [n]                       I take an exam on what I know and grade myself
+  /quiz me [n]                    I quiz you instead
+  /sleep                          consolidate: forget unused things, merge repeats, replay
+  /curious                        study my open questions (shelf, dictionary, web)
+  /study                          a full session: be curious, take an exam, then sleep
+  /define <word>                  look a word up in the dictionary
+  /progress                       how my studying is going
 
 Neural network:
   /train [epochs]                 give the network extra practice on all I know
@@ -73,6 +83,11 @@ def main(argv: list[str] | None = None) -> None:
     print(f"Loaded brain from {args.brain}: {s['memories']} memories, {s['facts']} facts, "
           f"{s['knowledge sentences']} sentences, {s['neural vocabulary']} words in the network.")
     print(f"Web lookups are {'on' if online else 'off'}. Type /help for commands.\n")
+    overnight = model.sleep_if_due()  # like sleeping: a day has passed since last time
+    if overnight:
+        print("ai> Good to see you again! Time passed, so I consolidated what I know.")
+        show_sleep(overnight)
+        print()
 
     queued = None  # a command typed at one of my questions, run next
     while True:
@@ -129,7 +144,11 @@ def main(argv: list[str] | None = None) -> None:
                 except _NET_ERRORS as e:
                     print(f"ai> I couldn't fetch that page: {e}")
                     continue
-                print(f"ai> I read {n} new sentences and trained my network on them.")
+                read = model.last_read
+                print(f"ai> I read {n} new sentences and trained my network on them."
+                      if not read["shelved"] else
+                      f"ai> I studied the {n} most important sentences and put {read['shelved']} "
+                      "on the shelf to look up later if needed.")
             elif cmd == "/web":
                 if not arg:
                     print("usage: /web <question>")
@@ -165,6 +184,44 @@ def main(argv: list[str] | None = None) -> None:
                         detail += f" | match {step['score']:.2f} on: {matched}"
                     if step["source"] != "my reasoning":
                         print(f"     {detail}")
+            elif cmd == "/quiz":
+                parts = arg.split()
+                who = "me" if parts and parts[0] == "me" else "ai"
+                nums = [p for p in parts if p.isdigit()]
+                n = int(nums[0]) if nums else 5
+                if who == "me":
+                    run_user_quiz(model, n, ask)
+                else:
+                    show_exam(model.quiz(n))
+            elif cmd == "/sleep":
+                show_sleep(model.sleep())
+            elif cmd == "/curious":
+                print("ai> Let me look into the things I couldn't answer...")
+                show_curiosity(model.be_curious(use_web=online))
+            elif cmd == "/study":
+                print("ai> Study session! First, my open questions...")
+                result = model.study_session(use_web=online)
+                show_curiosity(result["curiosity"])
+                print("ai> Now an exam on what I know...")
+                show_exam(result["exam"])
+                print("ai> And now I sleep on it...")
+                show_sleep(result["sleep"])
+            elif cmd == "/define":
+                if not arg:
+                    print("usage: /define <word>")
+                    continue
+                try:
+                    n = model.define(arg.split()[0])
+                except _NET_ERRORS as e:
+                    print(f"ai> I couldn't reach the dictionary: {e}")
+                    continue
+                if n:
+                    reply, _ = model.respond(f"What is {arg.split()[0]}?", learn=False)
+                    print(f"ai> {reply}")
+                else:
+                    print("ai> I couldn't find a definition for that.")
+            elif cmd == "/progress":
+                show_progress(model.progress())
             elif cmd == "/facts":
                 topic = {w.lower() for w in arg.split()}
                 from .reasoning import state, stem
