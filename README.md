@@ -224,6 +224,62 @@ fix was training that swaps nearly every name for a made-up or different word, s
 | `/writer load <file>` | use a writer you trained |
 | `/writer on` / `off` | switch it on or off |
 
+## Evaluating it from time to time
+
+`/evaluate` (or `python -m aimodel.evaluation --brain brain.json`) runs one standard scorecard. It keeps a
+history next to your brain (`brain.eval.json`), compares each run with the last one, and marks
+anything that got worse. Nothing in it changes your brain: no learning, no web, same questions in the
+same order every time, so a difference between two runs is real.
+
+It has two halves, and the difference matters:
+
+**Fixed tests (A-C)** use a small made-up world, so they don't depend on your data and mean the same
+thing on every run. They are regression guards: **after updating the code or retraining, none of these
+may get worse.** (`/evaluate quick` runs only these, in under a second.)
+
+| | Metric | What it tells you | Target |
+|---|---|---|---|
+| A | **Answers correct** (25 questions: lookups, lists, chains, negation, causes, steps, personal facts) | Does the reasoning work? | ≥ 90% |
+| A | **Says "I don't know" when it should** (10 things it was never told) | Does it avoid guessing? | ≥ 90% |
+| A | **Wrong among its answers** | When it answers, how often is it wrong? | ≤ 5% |
+| A | **Answers with words not in its sources** | Does it invent things? | 0% |
+| A | *Harder questions answered* (synonyms, typos, "which animals...") | **Room to grow**: no target, watch it rise as you improve the model | - |
+| B | **Corrupted drafts caught** (7 kinds: wrong yes/no, dropped "not", swapped roles, wrong animal, invented fact, repeat, left out) | Does the writer's safety check work? | ≥ 95% |
+| B | **Good drafts wrongly rejected** | Is the check too strict? | ≤ 10% |
+| C | **Greetings recognised** (46) | Is it polite? | ≥ 95% |
+| C | **Questions mistaken for greetings** (22) | Does it ignore real questions? | 0% |
+
+The **regression index** (0-100) averages A-C into one number to chart over time.
+
+**Your brain (D-F)** measure the model you have built. They change as you teach it, so they show progress,
+not regressions.
+
+| | Metric | What it tells you | Target |
+|---|---|---|---|
+| D | **Its own questions answered right** (every fact, taught reply and chain, graded; up to 200 sampled) | Does it remember what it knows? | ≥ 85% |
+| D | Facts, sentences, replies taught, parameters, size on disk | How big it has grown | - |
+| E | **Fading share** (things about to be forgotten) | Is knowledge decaying unused? (`/study` or `/quiz` strengthens it) | ≤ 20% |
+| E | **Rated answers you approved** (last 200) | Are you happy with it? | ≥ 80% |
+| E | Open study goals, corrections you typed, strongly remembered | Where it is weak; how much you are correcting it | - |
+| F | **Writer drafts passing the check**, and **with names it has never seen** | Is the transformer writer reliable on your data? | ≥ 90%, ≥ 80% |
+| F | Recent answers it worded, why drafts were rejected, time per answer | How much the writer is used and where it fails | - |
+| | **Slowest 5% answer time** | Is it still fast on your device? | ≤ 500 ms |
+
+**When to run it**
+
+| When | Run | Look at |
+|---|---|---|
+| After any code update, or before sharing a change | `/evaluate quick` | The regression index must not drop; nothing newly WORSE |
+| After you retrain the writer | `/evaluate` | F (both pass rates) and B; compare with the run before |
+| After a teaching or study session | `/evaluate` | D (recall), E (fading, approval) |
+| Once a week or month | `/evaluate history` | The trend in index, recall, approval, writer |
+
+**Baseline** (2026-10-01, the starter brain with the Kaggle-trained writer): index 99.5; answers correct
+100%; "I don't know" 100%; wrong 3%; invented words 0%; harder questions 50%; corrupted drafts caught
+100%; good drafts wrongly rejected 0%; greetings 100% / 0% false; own-question recall 97%; writer passes
+90% (82% with new names). The harder questions it misses today: synonyms ("dwell"), typos ("Whre"), and
+"which animals are birds?".
+
 ## Commands
 
 | Command | What it does |
@@ -246,6 +302,7 @@ fix was training that swaps nearly every name for a made-up or different word, s
 | `/study` | a full session: be curious, take an exam, sleep |
 | `/define <word>` | look a word up in the dictionary |
 | `/progress` | how studying is going |
+| `/evaluate [quick \| history]` | the standard scorecard, compared with your last run |
 | `/export [folder]` | save training data for your transformer writer |
 | `/writer [load <file> \| on \| off]` | use a writer you trained on Kaggle |
 | `/train [epochs]` | extra neural network training on everything it knows |

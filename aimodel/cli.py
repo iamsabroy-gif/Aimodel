@@ -24,7 +24,7 @@ Teaching:
 Greetings (hello, how are you, thanks, bye - I already know many):
   /greet                          show the greetings I know, your name and your greetings
   /greet <phrase> => <reply>      teach me a greeting or one more reply (any language;
-                                  {name} = your name). e.g. /greet namaste => Namaste {name}!
+                                  {{name}} = your name). e.g. /greet namaste => Namaste {{name}}!
   /greet forget <phrase>          forget a greeting you taught me
   Tell me "My name is Sam" and I'll greet you by name. /good or /bad after a greeting
   teaches me which replies you like.
@@ -35,6 +35,12 @@ Your data and the internet:
   /online on|off                  allow automatic web lookups (now: {online})
   /why                            show my reasoning for the last answer
   /facts [topic]                  show facts I've learned (about a topic)
+
+Checking how good I am (run it from time to time):
+  /evaluate                       the standard scorecard: fixed tests, your brain and your writer;
+                                  compares with the last run and saves it (about 20 seconds)
+  /evaluate quick                 only the fixed tests (a second): "did a code change break anything?"
+  /evaluate history               the trend over your past runs
 
 Studying (how I learn like a child):
   /quiz [n]                       I take an exam on what I know and grade myself
@@ -306,6 +312,21 @@ def main(argv: list[str] | None = None) -> None:
                           f"{model.writer.meta.get('trained_steps', '?')} steps on "
                           f"{model.writer.meta.get('trained_on', '?')}. It worded {used} of my last "
                           f"{len(model.answer_log)} answers.")
+            elif cmd == "/evaluate":
+                from .evaluation import (evaluate_all, format_history, format_report, history_path,
+                                         load_history, save_run)
+                hist = history_path(args.brain)
+                if arg == "history":
+                    print(format_history(load_history(hist), last=15))
+                else:
+                    quick = arg == "quick"
+                    print("ai> Running the standard tests" + (" (fixed tests only)..." if quick
+                                                              else " (about 20 seconds)..."))
+                    report = evaluate_all(model, args.brain, quick=quick)
+                    runs = load_history(hist)
+                    print(format_report(report, runs[-1] if runs else None))
+                    save_run(hist, report)
+                    print(f"\nSaved to {hist}. /evaluate history shows the trend.")
             elif cmd == "/progress":
                 show_progress(model.progress())
             elif cmd == "/facts":

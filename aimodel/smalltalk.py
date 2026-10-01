@@ -50,6 +50,7 @@ INTENTS: dict[str, tuple[list[str], list[str]]] = {
         ["how are you", "how are you doing", "how do you do", "how are you today", "hows it going",
          "how is it going", "hows everything", "how have you been", "hows life", "how r u", "hru",
          "how are things", "how you doing", "how is your day", "hows your day", "are you ok",
+         "how are you doing today", "how is everything going", "how are you going", "how is it going today",
          "are you well", "how are you feeling"],
         ["I'm doing well, thank you! How are you, {name}?",
          "Doing great, and learning every day. How are you?",

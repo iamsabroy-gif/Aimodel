@@ -26,7 +26,7 @@ from .reasoning import stem
 from .text import keywords, split_sentences, tokenize
 
 # Words the writer may use to connect sentences without them being in the evidence.
-GLUE = {"also", "addition", "top", "first", "then", "after", "finally", "reason", "because",
+GLUE = {"also", "addition", "top", "first", "then", "after", "finally", "next", "reason", "because",
         "yes", "probably", "here", "here's", "involves", "sure", "exact", "found", "prove",
         "can't", "cannot", "short", "means", "that's", "which", "so", "while", "both",
         "together", "other", "words", "summary", "overall", "however", "too", "well"}
@@ -254,7 +254,7 @@ class WriterMixin:
     def _write(self, question: str, answer: str, trace: list[dict], learn: bool):
         """Let the writer word the answer, if it stays true to the evidence."""
         evidence = writer_evidence(trace)
-        final, by = answer, "templates"
+        final, by, rejected = answer, "templates", []
         if self.writer is not None and self.writer_enabled and evidence:
             draft = self.writer.write(question, evidence)
             ok, problems = check_draft(draft, evidence, question, reference=answer)
@@ -262,12 +262,13 @@ class WriterMixin:
                 final, by = rsn.sentence(draft), "transformer"
                 note = "Worded by my transformer; every statement checked against the evidence"
             else:
+                rejected = problems
                 note = (f"My transformer's draft was rejected ({'; '.join(problems)}), "
                         "so I used my template answer")
             trace = trace + [{"kind": "writer", "text": note, "source": "my transformer"}]
         if learn:
             self.answer_log.append({"q": question, "evidence": evidence, "template": answer,
-                                    "final": final, "by": by, "rating": None})
+                                    "final": final, "by": by, "rating": None, "rejected": rejected})
             del self.answer_log[:-MAX_LOG]
         return final, trace
 
