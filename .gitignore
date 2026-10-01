@@ -1,4 +1,7 @@
 brain.json
-brain.neural.npz
+brain*.json
+*.npz
 *.tmp
 __pycache__/
+# exported training data holds your private notes
+writer_data/

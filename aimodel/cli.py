@@ -36,6 +36,12 @@ Studying (how I learn like a child):
   /define <word>                  look a word up in the dictionary
   /progress                       how my studying is going
 
+Your own transformer (the writer, trained on Kaggle):
+  /export [folder]                save training data for the writer (default: writer_data)
+  /writer                         show which writer words my answers
+  /writer load <file>             use a writer you trained (writer.npz)
+  /writer on|off                  switch the transformer writer on or off
+
 Neural network:
   /train [epochs]                 give the network extra practice on all I know
   /similar <word>                 words the network thinks mean something similar
@@ -58,8 +64,11 @@ def _show_reply(model: LearningModel, reply: str, confidence: float) -> None:
     if model.last_source == "memory":
         where = "memory"
     else:
-        sources = {s["source"] for s in model.last_trace if s["source"] != "my reasoning"}
+        sources = {s["source"] for s in model.last_trace
+                   if s["source"] not in ("my reasoning", "my transformer")}
         where = f"reasoning over {len(sources)} source{'s' if len(sources) != 1 else ''}"
+        if any(s["kind"] == "writer" and s["text"].startswith("Worded") for s in model.last_trace):
+            where += ", worded by my transformer"
     print(f"    (from {where}, confidence {confidence:.2f}; /why, /good or /bad)")
 
 
@@ -175,7 +184,7 @@ def main(argv: list[str] | None = None) -> None:
                     continue
                 print(f"ai> To answer '{model.last_query}' I used:")
                 labels = {"fact": "fact", "evidence": "evidence", "inference": "reasoning",
-                          "memory": "memory"}
+                          "memory": "memory", "writer": "writer"}
                 for i, step in enumerate(model.last_trace, 1):
                     print(f"  {i}. [{labels.get(step['kind'], step['kind'])}] {step['text']}")
                     detail = f"source: {step['source']}"
@@ -220,6 +229,39 @@ def main(argv: list[str] | None = None) -> None:
                     print(f"ai> {reply}")
                 else:
                     print("ai> I couldn't find a definition for that.")
+            elif cmd == "/export":
+                info = model.export_training_data(arg or "writer_data")
+                print(f"ai> Saved {info['examples']} training examples and {info['corpus lines']} "
+                      f"lines of text to {info['folder']}/")
+                print("    " + ", ".join(f"{n} {k}" for k, n in info["by kind"].items()))
+                print("    It holds your private notes: upload it to Kaggle as a PRIVATE dataset and")
+                print("    train with: python -m aimodel.train_writer --data <folder> --out writer.npz")
+            elif cmd == "/writer":
+                parts = arg.split(maxsplit=1)
+                if parts and parts[0] == "load" and len(parts) == 2:
+                    try:
+                        net = model.load_writer(parts[1])
+                    except (OSError, ValueError, KeyError) as e:
+                        print(f"ai> I couldn't load that writer: {e}")
+                        continue
+                    rate = net.meta.get("grounded_rate")
+                    print(f"ai> Loaded a writer with {net.n_params:,} parameters, trained "
+                          f"{net.meta.get('trained_steps', '?')} steps"
+                          + (f"; {rate:.0%} of its test answers passed the evidence check." if rate is not None else "."))
+                    print("    Its drafts are checked against the evidence; failing ones fall back to my templates.")
+                elif parts and parts[0] in ("on", "off"):
+                    model.writer_enabled = parts[0] == "on"
+                    print(f"ai> Transformer writer is {parts[0]}.")
+                elif model.writer is None:
+                    print(f"ai> My answers are worded with templates. I've logged {len(model.answer_log)} "
+                          "conversations to train a transformer on: /export, then train on Kaggle.")
+                else:
+                    used = sum(1 for e in model.answer_log if e.get("by") == "transformer")
+                    print(f"ai> Writer: transformer with {model.writer.n_params:,} parameters "
+                          f"({'on' if model.writer_enabled else 'off'}), trained "
+                          f"{model.writer.meta.get('trained_steps', '?')} steps on "
+                          f"{model.writer.meta.get('trained_on', '?')}. It worded {used} of my last "
+                          f"{len(model.answer_log)} answers.")
             elif cmd == "/progress":
                 show_progress(model.progress())
             elif cmd == "/facts":

@@ -120,6 +120,65 @@ tested, forgets what they never use and sleeps on the rest. `study.py` does the 
 
 `/progress` shows how it's going, including exam scores over time.
 
+### Your own transformer: the writer
+
+Everything above decides **what** is true. The writer decides **how to say it**.
+Out of the box, answers are worded with sentence templates. You can train your
+own tiny transformer (GPT-style, about 3 million parameters) to word them instead.
+It is trained on **your** data on **Kaggle**, and it runs on your phone with numpy
+only. Nothing is sent to any AI company.
+
+```
+question -> memory, facts, reasoning, study -> evidence -> [ transformer writes ] -> check -> answer
+```
+
+- **How it learns** (`train_writer.py`): it practises predicting the next piece of
+  text it has read (language), and writing answers from evidence (only the answer is
+  scored). Text is split into **BPE tokens** like GPT: common pieces such as
+  " mammal" become one token, so it trains faster and copies names more easily.
+- **What it learns from** (`/export`): your real questions and its answers, your
+  `/good` ratings (weight 2) and `/bad` corrections (weight 3, the strongest
+  signal), practice questions written from everything it knows, and replies you taught it.
+- **It reads instead of reciting.** During training, names in the examples are
+  randomly swapped for made-up words (consistently in question, evidence and
+  answer). Memorising never pays, so it learns to copy facts *from the evidence*.
+- **It can't make things up or leave things out.** Every draft is checked: each
+  meaningful word must appear in the question or the evidence, and it must say
+  (almost) everything the template answer says. Otherwise the template answer is
+  used. `/why` says which writer worded the answer, or why a draft was rejected.
+- **The model** (`transformer.py`): token and position embeddings, then layers of
+  masked multi-head self-attention and a feed-forward network, each with layer
+  norm and a residual connection, then a softmax over the vocabulary. It writes one
+  token at a time and caches past keys and values so each new token is cheap.
+
+**Train it on Kaggle (gradually):**
+
+1. In Aimodel: `/export` creates a `writer_data` folder.
+2. On Kaggle: **Create → New Dataset**, upload the folder's files, keep it **Private**.
+3. Open `notebooks/train_writer_on_kaggle.ipynb` on Kaggle (File → Import Notebook), add
+   your dataset as an input, turn on the **GPU** and **Internet**, then **Run all**.
+4. Download `writer.npz` and in Aimodel type `/writer load writer.npz`.
+5. Later, after teaching it more: export again and train with
+   `--resume writer.npz` so it keeps what it already learned.
+
+**What to expect.** In a test on this repo (a CPU, the smallest size, 6,000
+steps, about 650 examples about made-up animals), the writer answered questions
+about animals it had never seen: 97% of its answers used only words from their
+evidence and 90% were word-for-word what the template would say. Its misses
+left things out rather than inventing them. Before name swapping, a higher
+learning rate and enough steps, the same model fluently wrote about the *wrong*
+animal every time: the evidence check caught all of those. At first it imitates
+the templates. It moves beyond them through your `/good` ratings and `/bad`
+corrections, which count two and three times as much in training. The Kaggle
+notebook trains the larger `base` size on a GPU (about 3M parameters).
+
+| Command | What it does |
+|---|---|
+| `/export [folder]` | save training data for the writer |
+| `/writer` | which writer is wording answers, and how often the transformer passes the check |
+| `/writer load <file>` | use a writer you trained |
+| `/writer on` / `off` | switch it on or off |
+
 ## Commands
 
 | Command | What it does |
@@ -140,6 +199,8 @@ tested, forgets what they never use and sleeps on the rest. `study.py` does the 
 | `/study` | a full session: be curious, take an exam, sleep |
 | `/define <word>` | look a word up in the dictionary |
 | `/progress` | how studying is going |
+| `/export [folder]` | save training data for your transformer writer |
+| `/writer [load <file> \| on \| off]` | use a writer you trained on Kaggle |
 | `/train [epochs]` | extra neural network training on everything it knows |
 | `/similar <word>` | words the network thinks are related |
 | `/gen [words]` | generate text in your writing style |
@@ -178,7 +239,8 @@ ai> To answer 'Is a cat a living thing?' I used:
 
 This is a *small* model that runs on a phone. Its explanations are built from
 facts and sentences it has read, combined with its own sentence patterns and
-reasoning steps. It does not invent new ideas or write long essays like a
+reasoning steps. The transformer writer only rewords answers the reasoning has
+already found; it doesn't add knowledge or reasoning of its own. It does not invent new ideas or write long essays like a
 large language model (those have billions of parameters). Fact extraction
 uses simple grammar patterns, so complicated sentences are used as evidence
 rather than as facts. It gets better the more you feed it: `/read` your data,
@@ -208,3 +270,6 @@ m.save("brain.json")
 ```bash
 python3 -m unittest    # runs offline; the internet is faked in tests
 ```
+
+The training test runs only where PyTorch is installed (it is on Kaggle). Training
+needs PyTorch; using a trained writer needs only numpy.

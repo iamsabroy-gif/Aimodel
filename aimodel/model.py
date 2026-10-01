@@ -22,6 +22,8 @@ The model learns from you and from what it reads:
 7. **Study mode** - memory strength and forgetting, importance sorting, a
    dictionary, self-exams, sleep-like consolidation and curiosity
    (see `study.py`).
+8. **Writer** - a tiny transformer you train on Kaggle words the answers,
+   checked against the evidence (see `writer.py`, `transformer.py`).
 
 Everything is saved (a JSON "brain" plus the networks' weights in .npz).
 """
@@ -45,6 +47,7 @@ from .reasoning import stem
 from .study import GENERIC as _GENERIC, WEAK_WORDS, StudyMixin, bare as _bare
 from .text import TfidfIndex, keywords, looks_like_question, split_sentences, tokenize
 from .vectors import PretrainedVectors
+from .writer import WriterMixin
 
 _WORD_RE = re.compile(r"\S+")
 
@@ -59,6 +62,10 @@ def vectors_path(path: str) -> str:
     return os.path.splitext(path)[0] + ".vectors.npz"
 
 
+def writer_path(path: str) -> str:
+    return os.path.splitext(path)[0] + ".writer.npz"
+
+
 # "Here is an example:" - introduces something that isn't there (code, a table).
 _INTRO = re.compile(r"\b(example|following|below|follows|like this|shown)\b[^.!?]*:\s*$", re.I)
 
@@ -66,7 +73,7 @@ _CONNECTORS = ("Also, ", "On top of that, ", "In addition, ")
 _STEPS = ("First, ", "Then, ", "After that, ", "Finally, ")
 
 
-class LearningModel(StudyMixin):
+class LearningModel(StudyMixin, WriterMixin):
     # When the network knows this many words, it is rebuilt with bigger vectors.
     GROWTH = ((8000, 96), (30000, 160))
 
@@ -99,6 +106,7 @@ class LearningModel(StudyMixin):
         self.last_source: str | None = None  # "memory" | "knowledge" | "noted" | None
         self.last_trace: list[dict] = []
         self._init_study()
+        self._init_writer()
 
     # ------------------------------------------------------------------ memory
     def learn(self, prompt: str, response: str) -> None:
@@ -196,7 +204,8 @@ class LearningModel(StudyMixin):
                         if answer is None and self.recall(text):
                             answer = self.explain(text)
             if answer is not None:
-                self.last_reply, best, self.last_trace = answer
+                reply, best, trace = answer
+                self.last_reply, self.last_trace = self._write(text, reply, trace, learn)
                 self.last_source = "knowledge"
                 if learn:
                     self._mark_used(self.last_trace)
@@ -223,6 +232,7 @@ class LearningModel(StudyMixin):
             if evidence:  # teach the feedback network what good evidence looks like
                 self.ranker.train(evidence, [1.0 if good else 0.0] * len(evidence))
             self._grade_trace(good)  # and strengthen/weaken what the answer was built from
+            self._rate_last(good)    # and remember the rating to train the writer
             if good:  # a good researched answer becomes a trusted memory
                 self.learn(self.last_query, self.last_reply)
                 self.last_match, self.last_source = len(self.memories) - 1, "memory"
@@ -232,6 +242,7 @@ class LearningModel(StudyMixin):
     def correct(self, prompt: str, better_response: str) -> None:
         """Penalise the last answer and learn a better one."""
         self.feedback(good=False)
+        self._correct_last(prompt, better_response)
         self.learn(prompt, better_response)
 
     def forget(self, text: str) -> int:
@@ -479,12 +490,14 @@ class LearningModel(StudyMixin):
             if not chosen or (cov - covered and score >= 0.5 * cands[0][0]):
                 chosen.append(f)
                 covered |= cov
-        if chosen:  # a list of answers: "I like tea" and "I like coffee"
+        if chosen:
             top = chosen[0]
+            # "Tell me about the gorzu" asks about nothing but its subject: say all I know.
+            broad = set(wanted) <= {stem(t) for t in tokenize(top["subj"])}
             for score, cov, f in cands:
-                if (len(chosen) < 4 and f not in chosen and score >= 0.9 * cands[0][0]
-                        and f["rel"] == top["rel"] and _bare(f["subj"]) == _bare(top["subj"])):
-                    chosen.append(f)
+                if len(chosen) < 4 and f not in chosen and _bare(f["subj"]) == _bare(top["subj"]) and (
+                        broad or (score >= 0.9 * cands[0][0] and f["rel"] == top["rel"])):
+                    chosen.append(f)  # also lists: "I like tea" and "I like coffee"
         coverage = len(covered) / len(wanted)
         if coverage < 0.5 or self._key_word(wanted) not in covered:
             return [], 0.0
@@ -740,6 +753,9 @@ class LearningModel(StudyMixin):
             "neural size (dimensions)": self.neural.dim,
             "feedback examples": self.ranker.examples,
             "pretrained words": len(self.pretrained) if self.pretrained is not None else 0,
+            "writer": (f"transformer, {self.writer.n_params:,} parameters"
+                       + ("" if self.writer_enabled else " (off)")) if self.writer else "templates",
+            "conversations logged for training": len(self.answer_log),
             "style vocabulary": len({w for c in self.chain.values() for w in c} - {END}),
         }
 
@@ -755,6 +771,7 @@ class LearningModel(StudyMixin):
             "study": {"day": self.day, "last_sleep": self.last_sleep, "shelf": self.shelf,
                       "gaps": self.gaps, "exam_log": self.exam_log,
                       "interests": dict(self.interests.most_common(300))},
+            "writer": {"log": self.answer_log, "enabled": self.writer_enabled},
             "chain": {k: dict(v) for k, v in self.chain.items()},
         }
 
@@ -771,6 +788,9 @@ class LearningModel(StudyMixin):
         model.day, model.last_sleep = study.get("day", 0), study.get("last_sleep")
         model.gaps, model.exam_log = study.get("gaps", []), study.get("exam_log", [])
         model.interests = Counter(study.get("interests", {}))
+        writer = data.get("writer", {})
+        model.answer_log = writer.get("log", [])
+        model.writer_enabled = writer.get("enabled", True)
         model.facts = data.get("facts", [])
         model.ranker = FeedbackRanker.from_dict(data.get("ranker"))
         if not model.facts and model.knowledge:  # brain from before facts existed
@@ -791,6 +811,9 @@ class LearningModel(StudyMixin):
         if self.pretrained is not None and (self._vectors_changed or not os.path.exists(vectors_path(path))):
             self.pretrained.save(vectors_path(path))
             self._vectors_changed = False
+        if self.writer is not None and (self._writer_changed or not os.path.exists(writer_path(path))):
+            self.writer.save(writer_path(path))
+            self._writer_changed = False
 
     @classmethod
     def load(cls, path: str) -> "LearningModel":
@@ -800,6 +823,9 @@ class LearningModel(StudyMixin):
             model = cls.from_dict(json.load(f))
         model.neural = WordEmbeddings.load(neural_path(path))
         model.pretrained = PretrainedVectors.load(vectors_path(path))
+        if os.path.exists(writer_path(path)):
+            from .transformer import TinyTransformer
+            model.writer = TinyTransformer.load(writer_path(path))
         if not len(model.neural):  # brain from before the network existed
             model.neural.train([tokenize(m["prompt"]) + tokenize(m["response"])
                                 for m in model.memories]
