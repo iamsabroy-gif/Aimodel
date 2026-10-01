@@ -72,10 +72,14 @@ def _show_reply(model: LearningModel, reply: str, confidence: float) -> None:
     print(f"    (from {where}, confidence {confidence:.2f}; /why, /good or /bad)")
 
 
+# Jupyter raises a RuntimeError (StdinNotImplementedError) when nobody can type, e.g. in a saved run.
+_NO_INPUT = (EOFError, KeyboardInterrupt, RuntimeError)
+
+
 def ask(question: str) -> str:
     try:
         return input(question).strip()
-    except (EOFError, KeyboardInterrupt):
+    except _NO_INPUT:
         return ""
 
 
@@ -105,7 +109,7 @@ def main(argv: list[str] | None = None) -> None:
         else:
             try:
                 text = input("you> ").strip()
-            except (EOFError, KeyboardInterrupt):
+            except _NO_INPUT:
                 print()
                 break
         if not text:
