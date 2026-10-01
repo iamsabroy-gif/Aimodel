@@ -62,5 +62,29 @@ class TestLearningModel(unittest.TestCase):
             self.m.learn("  ", "x")
 
 
+class TestParameters(unittest.TestCase):
+    def test_a_new_brain_has_only_the_tiny_feedback_network(self):
+        counts = LearningModel(seed=0).parameter_counts()
+        self.assertEqual(counts, {"word network": 0, "feedback network": 81,
+                                  "transformer writer": 0, "total": 81})
+
+    def test_the_word_network_grows_with_what_it_reads(self):
+        m = LearningModel(seed=0)
+        m.add_document("Cats are mammals. Mammals are warm-blooded animals.", "a.txt")
+        words, dim = len(m.neural), m.neural.dim
+        counts = m.parameter_counts()
+        self.assertEqual(counts["word network"], 2 * words * dim)  # an input and an output vector per word
+        self.assertEqual(counts["total"], counts["word network"] + 81)
+
+    def test_the_writer_is_counted_and_shown_in_stats(self):
+        from aimodel.transformer import CharTokenizer, TinyTransformer
+        m = LearningModel(seed=0)
+        m.writer = TinyTransformer.random(CharTokenizer.build(["abc"]), block_size=32)
+        counts = m.parameter_counts()
+        self.assertEqual(counts["transformer writer"], m.writer.n_params)
+        self.assertGreater(counts["total"], 81)
+        self.assertIn(f"{counts['total']:,}", m.stats()["parameters (total)"])
+
+
 if __name__ == "__main__":
     unittest.main()

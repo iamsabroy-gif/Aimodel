@@ -763,7 +763,23 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         return " ".join(out)
 
     # ------------------------------------------------------------- persistence
+    def parameter_counts(self) -> dict:
+        """How many learned numbers each neural part has (the usual 'parameters')."""
+        word = int(self.neural.w_in.size + self.neural.w_out.size)
+        feedback = int(self.ranker.w1.size + self.ranker.b1.size + self.ranker.w2.size + 1)
+        writer = int(self.writer.n_params) if self.writer else 0
+        return {"word network": word, "feedback network": feedback,
+                "transformer writer": writer, "total": word + feedback + writer}
+
     def stats(self) -> dict:
+        counts = self.parameter_counts()
+        return {
+            "parameters (total)": (f"{counts['total']:,} = word network {counts['word network']:,}"
+                                   f" + feedback network {counts['feedback network']:,}"
+                                   f" + transformer writer {counts['transformer writer']:,}"),
+            **self._stats()}
+
+    def _stats(self) -> dict:
         return {
             "memories": len(self.memories),
             "knowledge sentences": len(self.knowledge),
