@@ -22,7 +22,7 @@ ZIP), unzip it, open `run.py` in Pydroid and press ▶.
 
 ```bash
 pkg update && pkg install python python-numpy git
-git clone -b ccr-34fc447e-og7rx9 https://github.com/iamsabroy-gif/Aimodel.git
+git clone -b main https://github.com/iamsabroy-gif/Aimodel.git
 cd Aimodel && python run.py
 ```
 
@@ -35,7 +35,7 @@ Run `termux-setup-storage` once to read your files, e.g.
 Create a notebook and turn **Internet on** (Session options). Then:
 
 ```python
-!git clone -b ccr-34fc447e-og7rx9 https://github.com/iamsabroy-gif/Aimodel.git
+!git clone -b main https://github.com/iamsabroy-gif/Aimodel.git
 %cd Aimodel
 
 from aimodel.cli import main                # interactive chat; /quit to stop
