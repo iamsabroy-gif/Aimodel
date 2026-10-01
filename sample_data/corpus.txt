@@ -1,0 +1,277 @@
+The red fox is a mammal.
+The red fox lives in forests.
+The red fox eats small animals and berries.
+The gray wolf is a mammal.
+The gray wolf lives in forests.
+The gray wolf eats meat.
+The cow is a mammal.
+The cow lives in farms.
+The cow eats grass.
+The horse is a mammal.
+The horse lives in grasslands.
+The horse eats grass.
+The sheep is a mammal.
+The sheep lives in grasslands.
+The sheep eats grass.
+The goat is a mammal.
+The goat lives in mountains.
+The goat eats plants.
+The pig is a mammal.
+The pig lives in farms.
+The pig eats grain and vegetables.
+The rabbit is a mammal.
+The rabbit lives in grasslands.
+The rabbit eats grass and leaves.
+The elephant is a mammal.
+The elephant lives in Africa and Asia.
+The elephant eats plants.
+The giraffe is a mammal.
+The giraffe lives in African savannas.
+The giraffe eats leaves.
+The lion is a mammal.
+The lion lives in African grasslands.
+The lion eats meat.
+The tiger is a mammal.
+The tiger lives in Asian forests.
+The tiger eats meat.
+The zebra is a mammal.
+The zebra lives in African grasslands.
+The zebra eats grass.
+The kangaroo is a mammal.
+The kangaroo lives in Australia.
+The kangaroo eats grass and leaves.
+The koala is a mammal.
+The koala lives in Australia.
+The koala eats eucalyptus leaves.
+The giant panda is a mammal.
+The giant panda lives in mountain forests in China.
+The giant panda eats bamboo.
+The polar bear is a mammal.
+The polar bear lives in the Arctic.
+The polar bear eats seals.
+The brown bear is a mammal.
+The brown bear lives in forests.
+The brown bear eats fish and berries.
+The dolphin is a mammal.
+The dolphin lives in the ocean.
+The dolphin eats fish.
+The blue whale is a mammal.
+The blue whale lives in the ocean.
+The blue whale eats krill.
+The camel is a mammal.
+The camel lives in deserts.
+The camel eats desert plants.
+The squirrel is a mammal.
+The squirrel lives in forests.
+The squirrel eats nuts and seeds.
+The hedgehog is a mammal.
+The hedgehog lives in gardens and forests.
+The hedgehog eats insects.
+The fruit bat is a mammal.
+The fruit bat lives in caves and forests.
+The fruit bat eats fruit.
+The bald eagle is a bird.
+The bald eagle lives in North America.
+The bald eagle eats fish and small animals.
+The sparrow is a bird.
+The sparrow lives in towns and fields.
+The sparrow eats seeds and insects.
+The owl is a bird.
+The owl lives in forests.
+The owl eats mice and insects.
+The penguin is a bird.
+The penguin lives in Antarctica.
+The penguin eats fish.
+The parrot is a bird.
+The parrot lives in tropical forests.
+The parrot eats fruit and seeds.
+The duck is a bird.
+The duck lives in ponds and rivers.
+The duck eats water plants and insects.
+The swan is a bird.
+The swan lives in lakes and rivers.
+The swan eats water plants.
+The hummingbird is a bird.
+The hummingbird lives in the Americas.
+The hummingbird eats nectar.
+The ostrich is a bird.
+The ostrich lives in African grasslands.
+The ostrich eats plants and insects.
+The crow is a bird.
+The crow lives in fields and towns.
+The crow eats seeds, insects and small animals.
+The crocodile is a reptile.
+The crocodile lives in rivers and swamps.
+The crocodile eats fish and other animals.
+The sea turtle is a reptile.
+The sea turtle lives in the ocean.
+The sea turtle eats jellyfish and seagrass.
+The cobra is a reptile.
+The cobra lives in Asia and Africa.
+The cobra eats small animals.
+The chameleon is a reptile.
+The chameleon lives in forests.
+The chameleon eats insects.
+The green iguana is a reptile.
+The green iguana lives in tropical forests.
+The green iguana eats leaves and fruit.
+The komodo dragon is a reptile.
+The komodo dragon lives in Indonesia.
+The komodo dragon eats deer and other animals.
+The salmon is a fish.
+The salmon lives in rivers and the ocean.
+The salmon eats insects and small fish.
+The great white shark is a fish.
+The great white shark lives in the ocean.
+The great white shark eats fish and seals.
+The clownfish is a fish.
+The clownfish lives in coral reefs.
+The clownfish eats algae and tiny animals.
+The goldfish is a fish.
+The goldfish lives in ponds.
+The goldfish eats plants and insects.
+The tuna is a fish.
+The tuna lives in the ocean.
+The tuna eats smaller fish.
+The honeybee is an insect.
+The honeybee lives in gardens and meadows.
+The honeybee eats nectar and pollen.
+The butterfly is an insect.
+The butterfly lives in gardens and meadows.
+The butterfly eats nectar.
+The ladybug is an insect.
+The ladybug lives in gardens.
+The ladybug eats aphids.
+The dragonfly is an insect.
+The dragonfly lives in ponds and rivers.
+The dragonfly eats small insects.
+The grasshopper is an insect.
+The grasshopper lives in grasslands.
+The grasshopper eats grass.
+The frog is an amphibian.
+The frog lives in ponds and wetlands.
+The frog eats insects.
+The salamander is an amphibian.
+The salamander lives in damp forests.
+The salamander eats insects and worms.
+The spider is an arachnid.
+The spider lives in gardens and forests.
+The spider eats insects.
+Mammals are warm-blooded animals.
+Birds are animals that have feathers.
+Reptiles are cold-blooded animals.
+Fish are animals that live in water.
+Insects are small animals with six legs.
+Amphibians are animals that live on land and in water.
+Arachnids are animals with eight legs.
+Animals are living things.
+Plants are living things.
+Whales are not fish.
+Dolphins are not fish.
+Bats are not birds.
+Snakes are not mammals.
+Spiders are not insects.
+Penguins are not mammals.
+Paris is the capital of France.
+France is a country in Europe.
+Berlin is the capital of Germany.
+Germany is a country in Europe.
+Rome is the capital of Italy.
+Italy is a country in Europe.
+Madrid is the capital of Spain.
+Spain is a country in Europe.
+Lisbon is the capital of Portugal.
+Portugal is a country in Europe.
+Athens is the capital of Greece.
+Greece is a country in Europe.
+Tokyo is the capital of Japan.
+Japan is a country in Asia.
+New Delhi is the capital of India.
+India is a country in Asia.
+Beijing is the capital of China.
+China is a country in Asia.
+Bangkok is the capital of Thailand.
+Thailand is a country in Asia.
+Seoul is the capital of South Korea.
+South Korea is a country in Asia.
+Jakarta is the capital of Indonesia.
+Indonesia is a country in Asia.
+Cairo is the capital of Egypt.
+Egypt is a country in Africa.
+Nairobi is the capital of Kenya.
+Kenya is a country in Africa.
+Abuja is the capital of Nigeria.
+Nigeria is a country in Africa.
+Rabat is the capital of Morocco.
+Morocco is a country in Africa.
+Brasilia is the capital of Brazil.
+Brazil is a country in South America.
+Buenos Aires is the capital of Argentina.
+Argentina is a country in South America.
+Lima is the capital of Peru.
+Peru is a country in South America.
+Ottawa is the capital of Canada.
+Canada is a country in North America.
+Mexico City is the capital of Mexico.
+Mexico is a country in North America.
+Havana is the capital of Cuba.
+Cuba is a country in North America.
+Canberra is the capital of Australia.
+Australia is a country in Oceania.
+Wellington is the capital of New Zealand.
+New Zealand is a country in Oceania.
+The sky is blue because air scatters blue light more than red light.
+Ice floats on water because ice is less dense than liquid water.
+Plants need sunlight because they use light energy to make food.
+Leaves look green because chlorophyll reflects green light.
+Thunder follows lightning because light travels faster than sound.
+The seasons change because the Earth is tilted on its axis.
+The moon has phases because we see different parts of its sunlit side as it orbits the Earth.
+Birds can fly because they have wings and light bones.
+Bread rises because yeast makes gas that fills the dough with bubbles.
+Metal feels cold because it moves heat away from your hand quickly.
+To make tea, boil water in a kettle.
+Then put a tea bag in a cup.
+Pour the hot water over the tea bag.
+Finally, wait three minutes and remove the bag.
+To plant a seed, dig a small hole.
+Then place the seed inside.
+After that, cover it with soil.
+Finally, water it gently.
+To wash your hands, wet them with clean water.
+Then apply soap.
+After that, rub your hands together for twenty seconds.
+Finally, rinse and dry them.
+To boil an egg, place it in a pot of water.
+Then heat the water until it boils.
+After that, cook the egg for ten minutes.
+Finally, cool it in cold water.
+To send an email, open your mail app.
+Then write a new message.
+After that, add the address and a subject.
+Finally, press send.
+Photosynthesis is the process plants use to make food from light, water and carbon dioxide.
+Gravity is the force that pulls objects toward the Earth.
+The Sun is a star.
+The Earth is a planet.
+Mars is the fourth planet from the Sun.
+Jupiter is the largest planet in the solar system.
+The Moon orbits the Earth.
+Water is a liquid.
+Ice is frozen water.
+Python is a programming language.
+Python is easy to read.
+A list is an ordered collection of items.
+Lists are mutable.
+Tuples are immutable.
+A dictionary stores values by key.
+A function is a reusable block of code.
+A variable is a name that holds a value.
+My dog is called Rex.
+Rex is a golden retriever who loves swimming.
+My sister lives in Lisbon.
+I like tea.
+I like building small things.
+My favourite programming language is Python because it is easy to read.
+My brother lives in Toronto.
+I like long walks.

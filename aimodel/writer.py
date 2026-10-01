@@ -38,8 +38,9 @@ def writer_evidence(trace: list[dict]) -> list[str]:
     for step in trace:
         if step.get("kind") not in ("fact", "evidence"):
             continue
-        text = rsn.clean(step["text"])
-        if step["kind"] == "evidence" and not step["source"].startswith("http"):
+        # A fact is a trimmed copy of a sentence; the writer should see the whole sentence.
+        text = rsn.clean(step.get("sentence") or step["text"])
+        if not step["source"].startswith("http"):
             text = rsn.flip_person(text)  # your notes say "I", answers to you say "you"
         text = rsn.sentence(text)
         if text and text not in out:
@@ -71,8 +72,13 @@ def complete(draft: str, reference: str, share: float = 0.8) -> tuple[bool, list
 
 
 # ----------------------------------------------------------------- training data
-def build_examples(model, limit: int = 5000) -> list[dict]:
-    """Question -> evidence -> answer examples to train the writer on."""
+def build_examples(model, limit: int = 5000, extra_questions=(), exam_questions: bool = True) -> list[dict]:
+    """Question -> evidence -> answer examples to train the writer on.
+
+    `extra_questions` are more practice questions to answer from what it knows
+    (used by the starter dataset to cover many ways of asking). With
+    `exam_questions=False` only those are used, not the model's own exam questions.
+    """
     examples, seen = [], set()
 
     def add(question, evidence, answer, weight, kind):
@@ -93,10 +99,13 @@ def build_examples(model, limit: int = 5000) -> list[dict]:
 
     # 2. Practice questions written from everything it knows (like exam questions),
     #    plus "Tell me about X" for things it knows several facts about.
-    questions = [q["q"] for q in model.make_questions(limit) if q["kind"] != "memory"]
-    subjects = Counter(rsn.head(f["subj"]) for f in model.facts if not rsn.is_personal(f))
-    questions += [f"Tell me about {s}" for s, n in subjects.items() if n >= 2 and s]
-    for q in questions[:limit]:
+    questions = []
+    if exam_questions:
+        questions = [q["q"] for q in model.make_questions(limit) if q["kind"] != "memory"]
+        subjects = Counter(rsn.head(f["subj"]) for f in model.facts if not rsn.is_personal(f))
+        questions += [f"Tell me about {s}" for s, n in subjects.items() if n >= 2 and s]
+    questions += list(extra_questions)
+    for q in questions[:limit + len(extra_questions)]:
         answer = model.explain(q)
         if answer is not None:
             add(q, writer_evidence(answer[2]), answer[0], 1.0, "practice")
@@ -107,10 +116,10 @@ def build_examples(model, limit: int = 5000) -> list[dict]:
     return examples
 
 
-def export_training_data(model, folder: str) -> dict:
+def export_training_data(model, folder: str, extra_questions=(), exam_questions: bool = True) -> dict:
     """Write writer_data.jsonl (examples) and corpus.txt (all text it has read)."""
     os.makedirs(folder, exist_ok=True)
-    examples = build_examples(model)
+    examples = build_examples(model, extra_questions=extra_questions, exam_questions=exam_questions)
     with open(os.path.join(folder, "writer_data.jsonl"), "w", encoding="utf-8") as f:
         for ex in examples:
             f.write(json.dumps(ex, ensure_ascii=False) + "\n")
@@ -177,5 +186,5 @@ class WriterMixin:
         if self.answer_log and self.answer_log[-1]["q"] == prompt:
             self.answer_log[-1]["correction"] = better
 
-    def export_training_data(self, folder: str) -> dict:
-        return export_training_data(self, folder)
+    def export_training_data(self, folder: str, extra_questions=(), exam_questions: bool = True) -> dict:
+        return export_training_data(self, folder, extra_questions, exam_questions)

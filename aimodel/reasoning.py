@@ -135,6 +135,28 @@ def _good_subject(words: list[str]) -> bool:
             and not _BAD_INSIDE & set(low[1:]) and not any(w in ",;:" for w in low))
 
 
+_CLAUSE_STARTERS = {"and", "or", "but", "so", "then", "which", "who", "whom", "whose", "because",
+                    "while", "where", "when", "although", "though", "since", "whereas", "as", "if",
+                    "however", "that", "yet", "while", "thus", "therefore"}
+
+
+def _list_comma(words: list[str], i: int) -> bool:
+    """Is the comma at words[i] part of a list ("seeds, insects and small animals")?
+
+    A list comma is followed by a short item and the list ends with "and"/"or";
+    a comma that opens a new clause ("..., and it flies", "..., which is") is not.
+    """
+    after = words[i + 1:]
+    if not after or after[0].lower() in _CLAUSE_STARTERS or after[0] in ",;:":
+        return False
+    tail = []
+    for w in after:
+        if w in ";:":
+            break
+        tail.append(w.lower())
+    return len(tail) <= 7 and ("and" in tail or "or" in tail)
+
+
 def extract_fact(sentence: str, topic: str | None = None) -> dict | None:
     """Turn a sentence into {"subj", "rel", "verb", "obj", "neg"} (or None).
 
@@ -165,8 +187,11 @@ def extract_fact(sentence: str, topic: str | None = None) -> dict | None:
             verb_words.append(words[m])
             m += 1
         obj = []
-        for w in words[m:]:
-            if w in ",;:" or w.lower() in _STOP_OBJ or len(obj) >= 20:
+        rest = words[m:]
+        for n, w in enumerate(rest):
+            if w.lower() in _STOP_OBJ or len(obj) >= 20 or w in ";:":
+                break
+            if w == "," and not _list_comma(rest, n):
                 break
             obj.append(w)
         while obj and obj[-1].lower() in _BAD_END:  # "processes by (which...)" -> "processes"
@@ -179,7 +204,7 @@ def extract_fact(sentence: str, topic: str | None = None) -> dict | None:
                 return None
             subj = topic
         return {"subj": subj, "rel": rel, "verb": " ".join(verb_words),
-                "obj": " ".join(obj), "neg": neg}
+                "obj": re.sub(r"\s+,", ",", " ".join(obj)), "neg": neg}
     return None
 
 

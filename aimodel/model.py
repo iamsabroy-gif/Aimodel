@@ -595,7 +595,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             for f in facts[1:]:
                 if f["text"] in used:
                     continue
-                same = rsn.head(f["subj"]) == subject
+                same = rsn.head(f["subj"]) == subject and not self._trimmed(f)
                 parts.append(rsn.state(f, subject=rsn.pronoun(first), also=True) if same
                              else _CONNECTORS[len(parts) % 3] + self._lower(self._say(f)))
                 steps.append({"kind": "fact", "text": rsn.state(f), "source": f["source"],
@@ -635,6 +635,12 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
                     step["features"] = features[step["sentence"]]
         return " ".join(parts), confidence, steps
 
+    @staticmethod
+    def _trimmed(fact: dict) -> bool:
+        """Did the fact lose part of its sentence (so the whole sentence should be said)?"""
+        plain = rsn.clean(fact["text"]).rstrip(".!?: ")
+        return len(plain) > len(rsn.state(fact).rstrip(".")) + 8
+
     def _say(self, fact: dict) -> str:
         """A fact as a sentence. If the fact lost part of its sentence (a trailing
         'who loves swimming'), say the whole sentence instead of a cut-off one."""
@@ -662,20 +668,36 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             return None
         _, conf, trace = evidence
         start = trace[0]
-        following = sorted(({"kind": "evidence", "text": k["text"], "source": k["source"],
-                             "pos": k.get("pos", 0)}
-                            for k in self.knowledge
-                            if k["source"] == start["source"] and 0 < k.get("pos", 0) - start["pos"] <= 4),
-                           key=lambda t: t["pos"])
+        later = sorted((k for k in self.knowledge
+                        if k["source"] == start["source"] and 0 < k.get("pos", 0) - start["pos"] <= 6),
+                       key=lambda k: k["pos"])
+        following = []
+        for k in later:
+            if re.match(r"^to\b", k["text"], re.I):  # "To wash your hands, ..." starts the next how-to
+                break
+            following.append({"kind": "evidence", "text": k["text"], "source": k["source"],
+                              "pos": k.get("pos", 0)})
+            if re.match(r"^(finally|lastly)\b", k["text"], re.I):  # the last step
+                break
         if not any(rsn.SEQUENCE_MARKER.search(t["text"]) for t in following):
             following = []  # the next sentences aren't steps of a process
-        steps = [start] + following
-        if len(steps) == 1:
+        if not following:
             parts = [self._rephrase(t, _CONNECTORS[n % 3] if n else "") for n, t in enumerate(trace)]
             return " ".join(parts), conf, trace
-        parts = [self._rephrase(t, "Finally, " if n == len(steps) - 1 else _STEPS[min(n, 2)])
-                 for n, t in enumerate(steps)]
-        return "Here's how: " + " ".join(parts), conf, trace + following
+
+        # "To make tea, boil water." -> "Here's how to make tea: First, boil water."
+        first, header = dict(start), "Here's how:"
+        m = re.match(r"^to\s+(.+?),\s+(\S.*)$", rsn.clean(start["text"]), re.I)
+        if m:
+            header, first["text"] = f"Here's how to {m.group(1)}:", m.group(2)
+        steps = [first] + following
+        middle = ("Then, ", "After that, ", "Next, ")
+        parts = []
+        for n, step in enumerate(steps):
+            lead = ("First, " if n == 0 else "Finally, " if n == len(steps) - 1
+                    else middle[(n - 1) % 3])
+            parts.append(self._rephrase(step, lead))
+        return header + " " + " ".join(parts), conf, [start] + following
 
     def _explain_why(self, text: str):
         def causal(i, coverage):  # a stated cause, as long as it's about the question

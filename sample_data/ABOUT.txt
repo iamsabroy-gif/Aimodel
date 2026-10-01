@@ -1,0 +1,12 @@
+Starter training data for the Aimodel writer (a tiny transformer).
+
+writer_data.jsonl  one example per line: question, evidence (the sentences the answer
+                   is built from), answer, weight and kind. `kind` is practice (questions
+                   asked of the facts), your correction (weight 3, how your own /bad
+                   corrections look) or taught. This is the same format /export writes.
+corpus.txt         every sentence the model read, for language practice.
+
+The facts are generic samples (animals, countries, science, how-tos, Python, a made-up
+person), not your data. A writer trained on this learns to word answers from evidence.
+Train with:  python -m aimodel.train_writer --data sample_data --out writer.npz
+Rebuild with: python -m aimodel.sample_data --out sample_data

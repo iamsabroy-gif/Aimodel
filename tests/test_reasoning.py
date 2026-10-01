@@ -23,6 +23,13 @@ class TestFacts(unittest.TestCase):
         self.assertTrue(extract_fact("Cats are not reptiles.")["neg"])
         self.assertIsNone(extract_fact("In 1876, Bell was granted a patent."))
 
+    def test_lists_stay_whole_but_new_clauses_are_cut(self):
+        self.assertEqual(extract_fact("The crow eats seeds, insects and small animals.")["obj"],
+                         "seeds, insects and small animals")
+        self.assertEqual(extract_fact("Cats like milk, which is white.")["obj"], "milk")
+        self.assertEqual(extract_fact("Paris is the capital of France, a country in Europe.")["obj"],
+                         "the capital of France")
+
     def test_pronoun_resolves_to_topic(self):
         self.assertEqual(extract_fact("It is the fourth planet.", topic="Mars")["subj"], "Mars")
         self.assertIsNone(extract_fact("It is the fourth planet."))
@@ -74,10 +81,26 @@ class TestReasoning(unittest.TestCase):
 
     def test_how_gives_steps_in_order(self):
         reply = self.ask("How do I make tea?")
-        self.assertTrue(reply.startswith("Here's how: First,"))
+        self.assertTrue(reply.startswith("Here's how to make tea: First, boil water in a kettle."))
         self.assertLess(reply.index("kettle"), reply.index("tea bag in a cup"))
         self.assertIn("Then, put", reply)
         self.assertIn("Finally, wait", reply)
+
+    def test_a_how_to_stops_at_its_own_last_step(self):
+        self.m.add_document("To plant a seed, dig a small hole. Then place the seed inside. After that, "
+                            "cover it with soil. Finally, water it gently.\n"
+                            "To wash your hands, wet them with clean water. Then apply soap.", "howto.txt")
+        reply = self.ask("How do I plant a seed?")
+        self.assertEqual(reply, "Here's how to plant a seed: First, dig a small hole. Then, place the seed "
+                                "inside. After that, cover it with soil. Finally, water it gently.")
+        self.assertNotIn("soap", reply)
+
+    def test_every_fact_about_a_subject_keeps_its_whole_list(self):
+        self.m.add_document("The crow is a bird. The crow lives in fields. "
+                            "The crow eats seeds, insects and small animals.", "animals.txt")
+        self.assertEqual(self.ask("What is the crow?"),
+                         "The crow is a bird. It also lives in fields. "
+                         "It also eats seeds, insects and small animals.")
 
     def test_learns_facts_you_state_in_chat(self):
         reply, _ = self.m.respond("My sister lives in Delhi")
