@@ -265,11 +265,21 @@ def evaluate(net: TinyTransformer, held_out: list[dict], limit: int = 50,
     return results
 
 
+def pick_device(torch, wanted: str) -> str:
+    """'auto' is a CUDA GPU if there is one, else the CPU. 'mps' is the Apple-silicon GPU."""
+    cuda = torch.cuda.is_available()
+    mps = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+    if wanted == "auto":
+        return "cuda" if cuda else "cpu"
+    if wanted == "cuda" and not cuda:
+        raise SystemExit("No CUDA GPU found here. Use --device cpu (slow), or train on Kaggle's GPU.")
+    if wanted == "mps" and not mps:
+        raise SystemExit("The Apple GPU (MPS) isn't available: it needs a Mac with Apple silicon and a "
+                         "recent PyTorch. Use --device cpu (slow), or train on Kaggle's GPU.")
+    return wanted
+
+
 def main(argv: list[str] | None = None) -> TinyTransformer:
-    try:
-        import torch
-    except ImportError:
-        raise SystemExit("Training needs PyTorch (Kaggle has it). Running the writer only needs numpy.")
     ap = argparse.ArgumentParser(description="Train the tiny transformer writer.")
     ap.add_argument("--data", required=True, help="folder written by /export")
     ap.add_argument("--out", default="writer.npz")
@@ -286,11 +296,20 @@ def main(argv: list[str] | None = None) -> TinyTransformer:
     ap.add_argument("--swap", type=float, default=0.85,
                     help="share of examples whose names are swapped for made-up words")
     ap.add_argument("--seed", type=int, default=0)
+    ap.add_argument("--device", choices=("auto", "cpu", "cuda", "mps"), default="auto",
+                    help="auto = a CUDA GPU if there is one, else the CPU. On an Apple-silicon Mac, "
+                         "'mps' uses the Apple GPU (much faster than the CPU)")
     args = ap.parse_args(argv)
+    os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")  # an operation the Apple GPU lacks runs on the CPU
+    try:
+        import torch
+    except ImportError:
+        raise SystemExit("Training needs PyTorch (Kaggle has it; on a Mac: pip install torch). "
+                         "Running the writer only needs numpy.")
 
     rng = random.Random(args.seed)
     torch.manual_seed(args.seed)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
+    device = pick_device(torch, args.device)
     examples, corpus = load_data(args.data)
     if not examples and not corpus:
         raise SystemExit("No training data found. Run /export first.")
@@ -331,7 +350,7 @@ def main(argv: list[str] | None = None) -> TinyTransformer:
         for g in opt.param_groups:
             g["lr"] = lr
         x, y, m = (torch.tensor(a).to(device) for a in batches.get(args.batch, args.lm_mix))
-        with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=use_amp):
+        with torch.autocast(device_type="cuda" if use_amp else "cpu", dtype=torch.float16, enabled=use_amp):
             logits = model(x)
             loss = torch.nn.functional.cross_entropy(
                 logits.float().view(-1, logits.shape[-1]), y.view(-1), reduction="none")

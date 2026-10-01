@@ -12,6 +12,41 @@ python3 -m aimodel --offline       # never look things up on the web
 python3 -m aimodel --brain me.json # use a different brain file
 ```
 
+## Run it on a Mac (Apple silicon)
+
+Chatting, studying, evaluating and using a trained writer need only Python 3.9+ (macOS has one; or
+`brew install python`) and numpy. In Terminal:
+
+```bash
+git clone -b main https://github.com/iamsabroy-gif/Aimodel.git
+cd Aimodel
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt        # just numpy
+python -m aimodel                      # chat; type /help
+```
+
+Your brain is saved as `brain.json` in the folder you run it from. Put a `writer.npz` next to it to use a
+trained writer.
+
+**What it costs** (measured on a Linux server; a 16 GB Mac has plenty of room): the whole chat with the
+3-million-parameter writer loaded uses about 64 MB of memory and answers in about 10 ms. A full
+`/evaluate` takes about 20 seconds.
+
+**Training the writer on the Mac** needs PyTorch (`pip install torch`) and is the one heavy job:
+
+```bash
+python -m aimodel.train_writer --data writer_data --size small --device mps
+```
+
+- `--device mps` uses the Apple GPU. Without it, training uses the CPU, which is far slower: on a 4-core
+  cloud server the full-size (`base`) writer took about 9 seconds per step, so about 15 hours for the
+  default 6,000 steps (a Kaggle GPU does it in 5 minutes). Apple silicon is much faster than that server,
+  but I could not measure it. Time a short run first (`--steps 50`) and multiply.
+- `--size small` (about 1 million parameters) is a gentler choice for a laptop; `base` (3 million)
+  peaked at about 4.4 GB of memory at batch size 32, which also fits in 16 GB.
+- `--device mps` has not been tested by me (I have no Mac). If it complains, use `--device cpu` or train on
+  Kaggle and copy `writer.npz` back.
+
 ## Run it on Android
 
 **Pydroid 3 (easiest):** install *Pydroid 3* from the Play Store, then

@@ -310,6 +310,21 @@ class TestTrainingData(unittest.TestCase):
 
 @unittest.skipUnless(HAVE_TORCH, "training needs PyTorch (on Kaggle)")
 class TestTraining(unittest.TestCase):
+    def test_device_choice(self):
+        import torch
+        from aimodel.train_writer import pick_device
+        self.assertEqual(pick_device(torch, "cpu"), "cpu")
+        self.assertEqual(pick_device(torch, "auto"), "cuda" if torch.cuda.is_available() else "cpu")
+        if not torch.cuda.is_available():
+            with self.assertRaises(SystemExit) as cuda:
+                pick_device(torch, "cuda")
+            self.assertIn("Kaggle", str(cuda.exception))
+        has_mps = hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+        if not has_mps:
+            with self.assertRaises(SystemExit) as mps:
+                pick_device(torch, "mps")
+            self.assertIn("Apple", str(mps.exception))
+
     def test_train_save_load_and_resume(self):
         from aimodel import train_writer
         m = model()
@@ -320,7 +335,7 @@ class TestTraining(unittest.TestCase):
             out = os.path.join(d, "writer.npz")
             with contextlib.redirect_stdout(io.StringIO()) as log:
                 train_writer.main(["--data", d, "--out", out, "--size", "tiny", "--steps", "6",
-                                   "--batch", "4"])
+                                   "--batch", "4", "--device", "cpu"])
             self.assertIn("numpy/PyTorch agreement", log.getvalue())
             net = m.load_writer(out)
             self.assertEqual(net.meta["trained_steps"], 6)
