@@ -32,6 +32,12 @@ Run `termux-setup-storage` once to read your files, e.g.
 
 ## Run it on Kaggle
 
+**Easiest:** import `notebooks/aimodel_on_kaggle.ipynb` (Kaggle: **Create → New Notebook →
+File → Import Notebook**, paste this repo's GitHub link or upload the file), set it **Private**,
+turn **Internet** on, and **Run all**. It gets the code, brings back your saved brain, checks that
+everything works (including a toy training run), and has switches to chat (`CHAT = True`) and to
+train your transformer writer (`TRAIN = True`, with a GPU). Or do it by hand:
+
 Create a notebook and turn **Internet on** (Session options). Then:
 
 ```python
@@ -155,8 +161,10 @@ question -> memory, facts, reasoning, study -> evidence -> [ transformer writes 
 
 1. In Aimodel: `/export` creates a `writer_data` folder.
 2. On Kaggle: **Create → New Dataset**, upload the folder's files, keep it **Private**.
-3. Open `notebooks/train_writer_on_kaggle.ipynb` on Kaggle (File → Import Notebook), add
-   your dataset as an input, turn on the **GPU** and **Internet**, then **Run all**.
+3. Easiest: use `notebooks/aimodel_on_kaggle.ipynb` (step 6, `TRAIN = True`, GPU on); it
+   exports from your brain itself, so there is no dataset to upload. Or use
+   `notebooks/train_writer_on_kaggle.ipynb` with your exported dataset added as an input,
+   the **GPU** and **Internet** on, then **Run all**.
 4. Download `writer.npz` and in Aimodel type `/writer load writer.npz`.
 5. Later, after teaching it more: export again and train with
    `--resume writer.npz` so it keeps what it already learned.
