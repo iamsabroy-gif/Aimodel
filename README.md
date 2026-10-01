@@ -14,19 +14,37 @@ python3 -m aimodel --brain me.json # use a different brain file
 
 ## Run it on a Mac (Apple silicon)
 
-Chatting, studying, evaluating and using a trained writer need only Python 3.9+ (macOS has one; or
-`brew install python`) and numpy. In Terminal:
+Chatting, studying, evaluating and using a trained writer need only Python 3.9+ and numpy. Open
+**Terminal** (Cmd+Space, type "Terminal"):
 
-```bash
-git clone -b main https://github.com/iamsabroy-gif/Aimodel.git
-cd Aimodel
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt        # just numpy
-python -m aimodel                      # chat; type /help
-```
+1. **Check Python:** `python3 --version` should say 3.9 or higher. If macOS offers to install the
+   "command line developer tools", accept (it also gives you `git`). Otherwise install Python from
+   python.org or with `brew install python`.
+2. **Get the code**, either with git:
+   ```bash
+   cd ~ && git clone -b main https://github.com/iamsabroy-gif/Aimodel.git && cd Aimodel
+   ```
+   or without git: download <https://github.com/iamsabroy-gif/Aimodel/archive/refs/heads/main.zip>,
+   unzip it, and `cd ~/Downloads/Aimodel-main`.
+3. **Set it up** (once). The prompt then starts with `(.venv)`:
+   ```bash
+   python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
+   ```
+4. **Start it:** `python -m aimodel`. You should see `Loaded brain from brain.json ...` and a `you>` prompt.
+   Try `hello`, `My name is <you>`, `/teach <question> => <answer>`, `/read <a text file>` (drag the
+   file into Terminal to paste its path), `/why`, `/quiz`, `/help`. Type `/quit` to leave.
+5. **Next time:** `cd ~/Aimodel && source .venv/bin/activate && python -m aimodel`. It saves as it goes
+   (`brain.json` and `brain.neural.npz` in that folder); copy those files to back it up.
+6. **Use the writer you trained on Kaggle:** download `writer.npz` from your private Kaggle dataset
+   "Aimodel starter writer", put it in the `Aimodel` folder and restart. It says
+   `Using your trained writer`. `/writer off` switches it off.
+7. **Check how it is doing:** `/evaluate quick` (a second) or `/evaluate` (about 20 seconds).
+8. **Update later:** `cd ~/Aimodel && git pull` (ZIP users: download again). Your brain files are not touched.
 
-Your brain is saved as `brain.json` in the folder you run it from. Put a `writer.npz` next to it to use a
-trained writer.
+Trouble? `command not found: git` means run `xcode-select --install` or use the ZIP. `No module named numpy`
+means run `source .venv/bin/activate` first. `python: command not found` means use `python3` (or activate
+the environment). To start fresh, delete `brain.json`, `brain.neural.npz`, `brain.writer.npz`,
+`brain.eval.json`. Web lookups need internet (`--offline` turns them off).
 
 **What it costs** (measured on a Linux server; a 16 GB Mac has plenty of room): the whole chat with the
 3-million-parameter writer loaded uses about 64 MB of memory and answers in about 10 ms. A full
