@@ -144,6 +144,9 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         self.neural = WordEmbeddings(seed=seed or 0)
         self.ranker = FeedbackRanker(seed=seed or 0)
         self.pretrained: PretrainedVectors | None = None
+        # Which word vectors a saved brain uses: "builtin" (ships with Aimodel, not stored in the brain),
+        # "custom" (your own file, stored beside the brain) or "off". Only load() acts on it.
+        self.vectors_mode = "builtin"
         self.fetch = web.http_get  # swap out in tests to avoid the network
         self.notify = None  # optional callback for progress messages
         self._rng = random.Random(seed)
@@ -453,6 +456,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
     def load_vectors(self, path: str, max_words: int = 50_000) -> int:
         """Load pretrained word vectors (GloVe/fastText text files)."""
         self.pretrained = PretrainedVectors.from_text(path, max_words)
+        self.vectors_mode = "custom"
         self._pretrained_cache, self._expand_cache = None, {}
         self._vectors_changed = True
         return len(self.pretrained)
@@ -462,10 +466,14 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         vectors = PretrainedVectors.builtin()
         if vectors is None:
             return 0
-        self.pretrained = vectors
+        self.pretrained, self.vectors_mode = vectors, "builtin"
         self._pretrained_cache, self._expand_cache = None, {}
-        self._vectors_changed = True
         return len(vectors)
+
+    def vectors_off(self) -> None:
+        """Stop using word vectors (a custom file stays on disk until you load vectors again)."""
+        self.pretrained, self.vectors_mode = None, "off"
+        self._pretrained_cache, self._expand_cache = None, {}
 
     def read(self, path_or_url: str) -> int:
         """Learn from a local file or a web page."""
@@ -1109,6 +1117,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             "writer": {"log": self.answer_log, "enabled": self.writer_enabled},
             "smalltalk": {"custom": self.smalltalk_custom, "weights": self.smalltalk_weights},
             "chain": {k: dict(v) for k, v in self.chain.items()},
+            "vectors": {"mode": self.vectors_mode},
         }
 
     @classmethod
@@ -1130,6 +1139,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         talk = data.get("smalltalk", {})
         model.smalltalk_custom = talk.get("custom", [])
         model.smalltalk_weights = talk.get("weights", {})
+        model.vectors_mode = data.get("vectors", {}).get("mode")  # None: decided by load()
         model.facts = data.get("facts", [])
         model.ranker = FeedbackRanker.from_dict(data.get("ranker"))
         if not model.facts and model.knowledge:  # brain from before facts existed
@@ -1147,7 +1157,8 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             json.dump(self.to_dict(), f, indent=1)
         os.replace(tmp, path)  # atomic: never leaves a half-written brain
         self.neural.save(neural_path(path))
-        if self.pretrained is not None and (self._vectors_changed or not os.path.exists(vectors_path(path))):
+        if (self.pretrained is not None and self.vectors_mode == "custom"
+                and (self._vectors_changed or not os.path.exists(vectors_path(path)))):
             self.pretrained.save(vectors_path(path))
             self._vectors_changed = False
         if self.writer is not None and (self._writer_changed or not os.path.exists(writer_path(path))):
@@ -1156,17 +1167,25 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
 
     @classmethod
     def load(cls, path: str) -> "LearningModel":
-        if not os.path.exists(path):
-            return cls()
-        with open(path, encoding="utf-8") as f:
-            model = cls.from_dict(json.load(f))
-        model.neural = WordEmbeddings.load(neural_path(path))
-        model.pretrained = PretrainedVectors.load(vectors_path(path))
-        if os.path.exists(writer_path(path)):
-            from .transformer import TinyTransformer
-            model.writer = TinyTransformer.load(writer_path(path))
-        if not len(model.neural):  # brain from before the network existed
-            model.neural.train([tokenize(m["prompt"]) + tokenize(m["response"])
-                                for m in model.memories]
-                               + [tokenize(k["text"]) for k in model.knowledge], epochs=3)
+        """Open a saved brain (or start a new one). Word vectors are on unless you turned them off."""
+        if os.path.exists(path):
+            with open(path, encoding="utf-8") as f:
+                model = cls.from_dict(json.load(f))
+            model.neural = WordEmbeddings.load(neural_path(path))
+            if os.path.exists(writer_path(path)):
+                from .transformer import TinyTransformer
+                model.writer = TinyTransformer.load(writer_path(path))
+            if not len(model.neural):  # brain from before the network existed
+                model.neural.train([tokenize(m["prompt"]) + tokenize(m["response"])
+                                    for m in model.memories]
+                                   + [tokenize(k["text"]) for k in model.knowledge], epochs=3)
+        else:
+            model = cls()
+        mine = PretrainedVectors.load(vectors_path(path))
+        if model.vectors_mode is None:  # a brain saved before this setting existed
+            model.vectors_mode = "custom" if mine is not None else "builtin"
+        if model.vectors_mode == "custom" and mine is not None:
+            model.pretrained = mine
+        elif model.vectors_mode != "off":
+            model.load_builtin_vectors()
         return model

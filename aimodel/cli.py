@@ -60,7 +60,8 @@ Your own transformer (the writer, trained on Kaggle):
 Neural network:
   /train [epochs]                 give the network extra practice on all I know
   /similar <word>                 words the network thinks mean something similar
-  /vectors builtin                load the small set of word vectors that ships with Aimodel
+  /vectors builtin                use the small set of word vectors that ships with Aimodel (on by default)
+  /vectors off                    stop using word vectors
   /vectors <file> [max words]     load pretrained word vectors (GloVe/fastText .txt)
 
 Other:
@@ -344,7 +345,11 @@ def main(argv: list[str] | None = None) -> None:
             elif cmd == "/vectors":
                 parts = arg.split()
                 if not parts:
-                    print("usage: /vectors builtin   or   /vectors <glove or fastText .txt/.zip file> [max words]")
+                    print("usage: /vectors builtin | off   or   /vectors <glove or fastText .txt/.zip file> [max words]")
+                    continue
+                if parts[0] == "off":
+                    model.vectors_off()
+                    print("ai> Word vectors are off. /vectors builtin turns them back on.")
                     continue
                 if parts[0] == "builtin":
                     n = model.load_builtin_vectors()

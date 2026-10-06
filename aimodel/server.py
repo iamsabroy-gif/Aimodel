@@ -327,10 +327,14 @@ def make_handler(state: AppState, token: str | None):
                 return self._json({"online": state.online})
             if route == "/api/vectors":
                 with state.lock:
-                    n = state.model.load_builtin_vectors()
+                    if b.get("on", True):
+                        n = state.model.load_builtin_vectors()
+                        if not n:
+                            raise ValueError("The bundled word vectors are missing from this copy of Aimodel.")
+                    else:
+                        state.model.vectors_off()
+                        n = 0
                     state.save()
-                if not n:
-                    raise ValueError("The bundled word vectors are missing from this copy of Aimodel.")
                 return self._json({"words": n})
             if route == "/api/writer":
                 with state.lock:

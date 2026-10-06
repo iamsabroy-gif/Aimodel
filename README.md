@@ -312,7 +312,8 @@ fix was training that swaps nearly every name for a made-up or different word, s
 ## Checking it on real text
 
 The built-in benchmark uses a made-up world, so it flatters the model. `python -m aimodel.devset <folder>` scores it on
-real Wikipedia introductions and `--misses` lists what it got wrong (add `--vectors builtin` to use word vectors).
+real Wikipedia introductions and `--misses` lists what it got wrong (add `--vectors builtin` to use word vectors;
+the scorer starts from a blank model, so they are off unless you ask).
 There are four sets in `sample_data/devset`, `devset2`, `devset3` and `devset4` (about 50 questions each, written
 before the model was run; about 10 of each are unanswerable and should be declined). Answerable questions right:
 
@@ -332,8 +333,9 @@ has been scored, so use new articles for the next honest test.
 
 Word vectors are lists of numbers, one per word, learned by others from billions of words, so that words with
 similar meanings get similar lists. Aimodel ships 30,000 common words (GloVe 6B, 50 dimensions, 3 MB, public
-domain; see `aimodel/data/`). Turn them on with `/vectors builtin` in the terminal or **Brain → Load word vectors** in
-the app; they are saved with your brain. They are used two ways: to compare a question with whole sentences by
+domain; see `aimodel/data/`). They are **on by default** for the terminal chat and the app, and are not copied into
+your brain files. Turn them off with `/vectors off` or the **Brain → Use word vectors** switch (the choice is
+remembered); `/vectors builtin` turns them back on. They are used two ways: to compare a question with whole sentences by
 meaning, and to widen a question word by up to 3 very close words. Letting them widen question words more freely
 let wrong sentences in (answers it should have declined), so that is kept tight. A bigger file works too:
 `/vectors glove.6B.100d.txt 50000`.

@@ -136,8 +136,8 @@ label.sw{display:flex;justify-content:space-between;align-items:center;padding:8
       <h2>Settings</h2>
       <label class="sw">Look things up on the web<input type="checkbox" id="online" style="width:auto"></label>
       <label class="sw">Use the trained writer<input type="checkbox" id="writer" style="width:auto"></label>
-      <label class="sw">Word vectors<span class="note" id="vecState"></span></label>
-      <div class="row"><button class="secondary" id="vecBtn">Load word vectors</button></div>
+      <label class="sw">Use word vectors<input type="checkbox" id="vecOn" style="width:auto"></label>
+      <div class="note" id="vecState"></div>
       <div class="note">Pretrained word meanings (GloVe, 30,000 words, 3 MB). Helps it match questions to sentences that use different words.</div>
       <div class="row"><input id="forgetText" placeholder="Forget replies about…"><button class="secondary" id="forgetBtn" style="flex:none">Forget</button></div>
       <div class="note" id="forgetOut"></div>
@@ -313,14 +313,13 @@ async function refresh() {
     $("pill").textContent = s.name ? "hi, " + s.name : "online"; $("pill").className = "pill";
     $("stats").innerHTML = Object.entries(s.stats).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
     $("online").checked = s.online; $("writer").checked = s.writer;
-    $("vecState").textContent = s.vectors ? s.vectors.toLocaleString() + " words loaded" : "not loaded";
-    $("vecBtn").disabled = s.vectors > 0;
+    $("vecOn").checked = s.vectors > 0;
+    $("vecState").textContent = s.vectors ? s.vectors.toLocaleString() + " words loaded" : "off";
     if (s.job.running) { showJob(s.job); watch(); }
   } catch (e) { $("pill").textContent = e.message.startsWith("Not auth") ? "locked" : "offline"; }
 }
-$("vecBtn").onclick = async () => {
-  $("vecBtn").disabled = true;
-  try { await api("/api/vectors", {}); } catch (e) { alert(e.message); }
+$("vecOn").onchange = async (e) => {
+  try { await api("/api/vectors", {on: e.target.checked}); } catch (err) { alert(err.message); }
   refresh();
 };
 $("online").onchange = (e) => api("/api/online", {on: e.target.checked});

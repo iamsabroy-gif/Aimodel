@@ -125,9 +125,10 @@ class TestBundledVectors(unittest.TestCase):
         near = [w for w, _ in m.pretrained.similar("satellite", 5)]
         self.assertIn("satellites", near)
 
-    def test_the_app_can_load_them(self):
+    def test_the_app_has_them_on_and_can_turn_them_off(self):
         with tempfile.TemporaryDirectory() as d:
-            httpd = serve(os.path.join(d, "brain.json"), "127.0.0.1", 0, False, None)
+            brain = os.path.join(d, "brain.json")
+            httpd = serve(brain, "127.0.0.1", 0, False, None)
             threading.Thread(target=httpd.serve_forever, daemon=True).start()
             try:
                 def call(path, body=None):
@@ -135,10 +136,27 @@ class TestBundledVectors(unittest.TestCase):
                                                  data=None if body is None else json.dumps(body).encode())
                     with urllib.request.urlopen(req, timeout=60) as r:
                         return json.loads(r.read())
+                self.assertEqual(call("/api/state")["vectors"], 30000)  # on by default
+                self.assertEqual(call("/api/vectors", {"on": False})["words"], 0)
                 self.assertEqual(call("/api/state")["vectors"], 0)
-                self.assertEqual(call("/api/vectors", {})["words"], 30000)
-                self.assertEqual(call("/api/state")["vectors"], 30000)
-                self.assertTrue(os.path.exists(os.path.join(d, "brain.vectors.npz")))  # kept with the brain
+                self.assertEqual(LearningModel.load(brain).pretrained, None)  # and it is remembered
+                self.assertEqual(call("/api/vectors", {"on": True})["words"], 30000)
+                self.assertFalse(os.path.exists(os.path.join(d, "brain.vectors.npz")))  # not copied into the brain
+                self.assertEqual(len(LearningModel.load(brain).pretrained), 30000)
             finally:
                 httpd.shutdown()
                 httpd.server_close()
+
+    def test_your_own_vectors_stay_yours(self):
+        with tempfile.TemporaryDirectory() as d:
+            brain, vec = os.path.join(d, "brain.json"), os.path.join(d, "v.txt")
+            with open(vec, "w") as f:
+                f.write("cat 1 0\ndog 0.9 0.1\nsky 0 1\n")
+            m = LearningModel.load(brain)
+            m.load_vectors(vec)
+            m.save(brain)
+            again = LearningModel.load(brain)
+            self.assertEqual(len(again.pretrained), 3)  # not replaced by the bundled set
+            again.vectors_off()
+            again.save(brain)
+            self.assertIsNone(LearningModel.load(brain).pretrained)

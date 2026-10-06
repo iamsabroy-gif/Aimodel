@@ -53,6 +53,8 @@ class TestLearningModel(unittest.TestCase):
             path = os.path.join(d, "brain.json")
             self.m.save(path)
             loaded = LearningModel.load(path)
+        self.assertEqual(loaded.pretrained is not None, True)  # the bundled word vectors are on by default
+        self.m.load_builtin_vectors()
         self.assertEqual(loaded.memories, self.m.memories)
         self.assertEqual(loaded.stats(), self.m.stats())
         self.assertEqual(loaded.respond("your name?")[0], "I'm your tiny AI.")
