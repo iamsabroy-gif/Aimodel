@@ -311,24 +311,32 @@ fix was training that swaps nearly every name for a made-up or different word, s
 
 ## Checking it on real text
 
-The built-in benchmark uses a made-up world, so it flatters the model. `python -m aimodel.devset` scores it on
-real Wikipedia introductions (`sample_data/devset`, 52 questions written before the model was run, 42
-answerable and 10 not) and `--misses` lists what it got wrong. The code was tuned on that set, so a second set
-(`sample_data/devset2`, 54 questions) was kept aside. Results so far:
+The built-in benchmark uses a made-up world, so it flatters the model. `python -m aimodel.devset <folder>` scores it on
+real Wikipedia introductions and `--misses` lists what it got wrong (add `--vectors builtin` to use word vectors).
+There are four sets in `sample_data/devset`, `devset2`, `devset3` and `devset4` (about 50 questions each, written
+before the model was run; about 10 of each are unanswerable and should be declined). Answerable questions right:
 
-| | before | after |
-|---|---|---|
-| devset (tuned on), answerable right | 28/42 (67%) | 35/42 (83%) |
-| devset2 (tuned on later), answerable right | 23/44 (52%) | 32/44 (73%) |
-| devset3 (untouched when first scored), answerable right | 29/45 (64%) | 29/45 (64%) |
-| devset3, answered wrongly | 10 | 4 |
-| unanswerable correctly declined, devset / devset2 / devset3 | 6/10, 9/10, 9/10 | 10/10, 10/10, 9/10 |
+| set | no vectors | with word vectors | wrongly answered | declined correctly |
+|---|---|---|---|---|
+| devset (tuned on) | 35/42 (83%) | 38/42 (90%) | 3 | 10/10 |
+| devset2 (tuned on) | 32/44 (73%) | 35/44 (80%) | 5 | 9/10 |
+| devset3 (tuned on, a little) | 29/45 (64%) | 32/45 (71%) | 5 | 9/10 |
+| devset4 (**untouched holdout**, scored once) | 28/43 (65%) | 30/43 (70%) | 6 | 9/10 |
 
-The honest reading is the devset3 row: on articles the code had never seen it answered no more questions
-correctly than before, but it gave far fewer wrong answers (it says "I don't know" instead). The gains on
-devset and devset2 are mostly tuning. What blocks it now is vocabulary: the question says "moons" and the text
-"natural satellites", "sink" and "sank", "carry" and "equipped with". Pretrained word vectors (`/vectors`) are the
-next step. Each set's misses have been read, so use new articles for the next honest test.
+Read the last row: on articles it had never seen, word vectors added about 5 points and cost nothing in wrong
+answers. Misses on text it has not seen are mostly vocabulary ("moons" vs "natural satellites", "sink" vs "sank"),
+questions whose answer is spread over two sentences, and facts in brackets. Each set's misses get read once it
+has been scored, so use new articles for the next honest test.
+
+## Word vectors
+
+Word vectors are lists of numbers, one per word, learned by others from billions of words, so that words with
+similar meanings get similar lists. Aimodel ships 30,000 common words (GloVe 6B, 50 dimensions, 3 MB, public
+domain; see `aimodel/data/`). Turn them on with `/vectors builtin` in the terminal or **Brain → Load word vectors** in
+the app; they are saved with your brain. They are used two ways: to compare a question with whole sentences by
+meaning, and to widen a question word by up to 3 very close words. Letting them widen question words more freely
+let wrong sentences in (answers it should have declined), so that is kept tight. A bigger file works too:
+`/vectors glove.6B.100d.txt 50000`.
 
 ## Evaluating it from time to time
 

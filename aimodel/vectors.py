@@ -17,6 +17,9 @@ import numpy as np
 from .text import STOPWORDS
 
 
+BUILTIN = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "glove50_30k.npz")
+
+
 class PretrainedVectors:
     def __init__(self, words: list[str], matrix: np.ndarray):
         self.words = words
@@ -54,6 +57,11 @@ class PretrainedVectors:
         if not words:
             raise ValueError(f"no word vectors found in {path}")
         return cls(words, np.vstack(rows))
+
+    @classmethod
+    def builtin(cls) -> "PretrainedVectors | None":
+        """The small set that ships with Aimodel (GloVe 6B, 50 dimensions), or None if it is missing."""
+        return cls.load(BUILTIN)
 
     def similar(self, word: str, k: int = 15) -> list[tuple[str, float]]:
         i = self.vocab.get(word.lower())

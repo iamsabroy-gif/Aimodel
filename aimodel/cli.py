@@ -60,6 +60,7 @@ Your own transformer (the writer, trained on Kaggle):
 Neural network:
   /train [epochs]                 give the network extra practice on all I know
   /similar <word>                 words the network thinks mean something similar
+  /vectors builtin                load the small set of word vectors that ships with Aimodel
   /vectors <file> [max words]     load pretrained word vectors (GloVe/fastText .txt)
 
 Other:
@@ -343,7 +344,12 @@ def main(argv: list[str] | None = None) -> None:
             elif cmd == "/vectors":
                 parts = arg.split()
                 if not parts:
-                    print("usage: /vectors <glove or fastText .txt/.zip file> [max words]")
+                    print("usage: /vectors builtin   or   /vectors <glove or fastText .txt/.zip file> [max words]")
+                    continue
+                if parts[0] == "builtin":
+                    n = model.load_builtin_vectors()
+                    print(f"ai> Loaded {n} pretrained words. I now understand word meanings much better."
+                          if n else "ai> The bundled word vectors are missing from this copy.")
                     continue
                 print("ai> Loading word vectors (this can take a minute)...")
                 try:

@@ -58,6 +58,7 @@ class AppState:
     def overview(self) -> dict:
         m = self.model
         return {"stats": m.stats(), "online": self.online, "job": self.job.snapshot(),
+                "vectors": len(m.pretrained) if m.pretrained is not None else 0,
                 "name": m.user_name() or None, "writer": m.writer is not None and m.writer_enabled}
 
     # -- chat
@@ -324,6 +325,13 @@ def make_handler(state: AppState, token: str | None):
             if route == "/api/online":
                 state.online = bool(b.get("on"))
                 return self._json({"online": state.online})
+            if route == "/api/vectors":
+                with state.lock:
+                    n = state.model.load_builtin_vectors()
+                    state.save()
+                if not n:
+                    raise ValueError("The bundled word vectors are missing from this copy of Aimodel.")
+                return self._json({"words": n})
             if route == "/api/writer":
                 with state.lock:
                     state.model.writer_enabled = bool(b.get("on"))

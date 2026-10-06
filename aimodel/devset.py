@@ -17,8 +17,13 @@ from .model import LearningModel
 DEFAULT = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sample_data", "devset")
 
 
-def run(folder: str = DEFAULT) -> dict:
+def run(folder: str = DEFAULT, vectors: str | None = None) -> dict:
+    """vectors: None, "builtin", or the path of a GloVe/fastText file."""
     model = LearningModel(seed=0)
+    if vectors == "builtin":
+        model.load_builtin_vectors()
+    elif vectors:
+        model.load_vectors(vectors)
     for path in sorted(glob.glob(os.path.join(folder, "*.txt"))):
         with open(path, encoding="utf-8") as f:
             model.add_document(f.read(), os.path.basename(path))
@@ -43,8 +48,9 @@ def run(folder: str = DEFAULT) -> dict:
 
 def main(argv: list[str] | None = None) -> None:
     argv = sys.argv[1:] if argv is None else argv
-    folder = next((a for a in argv if not a.startswith("-")), DEFAULT)
-    result = run(folder)
+    vectors = argv[argv.index("--vectors") + 1] if "--vectors" in argv else None
+    folder = next((a for a in argv if not a.startswith("-") and a != vectors), DEFAULT)
+    result = run(folder, vectors)
     for skill, (ok, total) in result["by_skill"].items():
         print(f"{skill:11s} {ok}/{total}")
     a, d = result["answerable"], result["declined_correctly"]

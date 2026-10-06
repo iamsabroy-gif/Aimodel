@@ -154,6 +154,9 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         self._expand_cache: dict = {}
         self._names_cache = (-1, set())
         self._vocab_cache = (None, set())
+        # how pretrained word vectors are used: to widen question words, and/or to compare whole sentences
+        # (widening question words with similar words let wrong sentences in; comparing whole sentences did not)
+        self.vector_settings = {"expand": True, "sentence": True, "k": 3, "min": 0.85}
         self._df_cache = (0, Counter())
         self._topic_cache = (-1, {})
         self.last_match: int | None = None
@@ -454,6 +457,16 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         self._vectors_changed = True
         return len(self.pretrained)
 
+    def load_builtin_vectors(self) -> int:
+        """Use the word vectors that ship with Aimodel. Returns how many words, or 0 if the file is missing."""
+        vectors = PretrainedVectors.builtin()
+        if vectors is None:
+            return 0
+        self.pretrained = vectors
+        self._pretrained_cache, self._expand_cache = None, {}
+        self._vectors_changed = True
+        return len(vectors)
+
     def read(self, path_or_url: str) -> int:
         """Learn from a local file or a web page."""
         if re.match(r"https?://", path_or_url):
@@ -503,7 +516,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
 
     def _meaning(self, query: list[str], own: np.ndarray, pre: np.ndarray | None) -> np.ndarray:
         scores = (own @ self.neural.sentence_vectors([query])[0]) * self.neural.maturity
-        if pre is not None:
+        if pre is not None and self.vector_settings["sentence"]:
             scores = np.maximum(scores, pre @ self.pretrained.sentence_vectors([query])[0])
         return scores
 
@@ -511,8 +524,9 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         """The word plus words that mean nearly the same (from the networks)."""
         if word not in self._expand_cache:
             out = {stem(word)} | {stem(w) for w in family(word)}
-            if self.pretrained is not None:
-                out |= {stem(w) for w, s in self.pretrained.similar(word, 15) if s >= 0.6}
+            if self.pretrained is not None and self.vector_settings["expand"]:
+                cfg = self.vector_settings
+                out |= {stem(w) for w, s in self.pretrained.similar(word, cfg["k"]) if s >= cfg["min"]}
             if len(self.neural) >= 5000:
                 out |= {stem(w) for w, s in self.neural.similar(word, 10) if s >= 0.8}
             self._expand_cache[word] = out

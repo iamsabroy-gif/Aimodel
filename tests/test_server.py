@@ -116,3 +116,29 @@ class TestServer(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestBundledVectors(unittest.TestCase):
+    def test_the_bundled_word_vectors_load_and_mean_something(self):
+        m = LearningModel(seed=0)
+        self.assertEqual(m.load_builtin_vectors(), 30000)
+        near = [w for w, _ in m.pretrained.similar("satellite", 5)]
+        self.assertIn("satellites", near)
+
+    def test_the_app_can_load_them(self):
+        with tempfile.TemporaryDirectory() as d:
+            httpd = serve(os.path.join(d, "brain.json"), "127.0.0.1", 0, False, None)
+            threading.Thread(target=httpd.serve_forever, daemon=True).start()
+            try:
+                def call(path, body=None):
+                    req = urllib.request.Request(f"http://127.0.0.1:{httpd.server_address[1]}{path}",
+                                                 data=None if body is None else json.dumps(body).encode())
+                    with urllib.request.urlopen(req, timeout=60) as r:
+                        return json.loads(r.read())
+                self.assertEqual(call("/api/state")["vectors"], 0)
+                self.assertEqual(call("/api/vectors", {})["words"], 30000)
+                self.assertEqual(call("/api/state")["vectors"], 30000)
+                self.assertTrue(os.path.exists(os.path.join(d, "brain.vectors.npz")))  # kept with the brain
+            finally:
+                httpd.shutdown()
+                httpd.server_close()
