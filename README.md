@@ -89,9 +89,13 @@ A phone-friendly app (installable to your home screen) where you add datasets, t
 small web app served by the model itself, so there is nothing extra to install (numpy only).
 
 ```bash
-python3 -m aimodel.server                  # this device only: open http://127.0.0.1:8765
-python3 -m aimodel.server --host 0.0.0.0   # your phone on the same Wi-Fi can connect too
+./start.sh            # first run sets everything up, then starts the app on this device
+./start.sh --phone    # same, but your phone on the same Wi-Fi can connect (prints a link)
 ```
+
+On Windows use `start.bat` / `start.bat --phone`. Or run it yourself:
+`python3 -m aimodel.server` (this device only, `http://127.0.0.1:8765`) or
+`python3 -m aimodel.server --host 0.0.0.0` (other devices on your Wi-Fi too).
 
 - **On the phone itself (Android):** run it in Termux (see *Run it on Android*), then open
   `http://127.0.0.1:8765` in Chrome and choose **Add to Home screen**.
