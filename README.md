@@ -341,7 +341,10 @@ your brain files. Turn them off with `/vectors off` or the **Brain → Use word 
 remembered); `/vectors builtin` turns them back on. They are used two ways: to compare a question with whole sentences by
 meaning, and to widen a question word by up to 3 very close words. Letting them widen question words more freely
 let wrong sentences in (answers it should have declined), so that is kept tight. A bigger file works too:
-`/vectors glove.6B.100d.txt 50000`.
+`/vectors glove.6B.100d.txt 50000`, but a measured comparison found no benefit: on the four tuned-on sets, GloVe at
+50, 100, 200 and 300 dimensions and 30,000 or 100,000 words all landed within 6 questions of each other out of 174
+(139 right with no vectors, 145 to 149 with any of them), centering the vectors changed nothing, and the 3 MB
+50-dimension set shipped here was as good as any. More dimensions did not mean better answers.
 
 ## Evaluating it from time to time
 
