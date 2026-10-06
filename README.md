@@ -365,9 +365,10 @@ not regressions.
 90% (82% with new names). Since then it fixes typos ("Whre") and synonyms ("dwell"), lists members ("Which animals are birds?",
 "Name all the birds."), answers either/or questions ("Is it a bird or a mammal?"), says "No, not as far as I
 know" to "Does the lorpan eat meat?" (naming what it does know, never guessing about things it has never heard
-of) and finds what two things share ("What do mammals and birds have in common?"). The harder set grew from 6
-to 13 questions and it passes 11 (85%). Still missed today: properties inherited from a kind ("Does a quillet
-have feathers?" because birds do) and comparisons ("What is the difference between a mimbat and a quillet?").
+of) and finds what two things share ("What do mammals and birds have in common?"). It also passes on what a kind
+is like ("Does a quillet have feathers?" gets "Probably yes", because it is a bird and birds have feathers).
+The harder set grew from 6 to 13 questions and it passes 12 (92%). Still missed today: comparisons
+("What is the difference between a mimbat and a quillet?").
 `train_writer --size large` (about 7M parameters) is available for a bigger writer, but it only rewords
 answers; it does not add reasoning.
 

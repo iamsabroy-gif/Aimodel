@@ -131,31 +131,70 @@ def members(facts: list[dict], category: str, cls: str) -> list[dict]:
 _AUX = ("do", "does", "did", "can", "could")
 
 
-def check_claim(facts: list[dict], text: str):
-    """Answer "Does X <verb> Y?" from what I know about X's <verb>.
+_CLAUSE = re.compile(r"\b(?:that|which)\s+(?:also\s+)?(\w+)\s+(.+)$", re.I)
+_IRREGULAR = {"has": "have", "had": "have", "does": "do", "goes": "go", "is": "be", "are": "be"}
 
-    Returns (verdict, facts_used) or None. "yes" if a fact says so, "no" if a fact denies it,
-    and "not known" if I know what X does with that verb but Y isn't part of it (an honest
-    "not as far as I know", never a bare no). Nothing at all known about X's verb gives None.
+
+def _base(verb: str) -> str:
+    verb = verb.lower()
+    if verb in _IRREGULAR:
+        return _IRREGULAR[verb]
+    if verb.endswith("ies"):
+        return verb[:-3] + "y"
+    if verb.endswith(("sses", "shes", "ches", "xes")):
+        return verb[:-2]
+    return verb[:-1] if verb.endswith("s") and not verb.endswith("ss") else verb
+
+
+def _properties(f: dict):
+    """(verb, what, negated) said by a fact: "birds have wings", or "animals that have feathers"."""
+    if f["rel"] not in ("be", "be called"):
+        yield f["rel"].split()[0], f["obj"], f["neg"]
+    m = _CLAUSE.search(f["obj"])
+    if m and f["rel"] in ("be", "be called") and not f["neg"]:
+        yield _base(m.group(1)), m.group(2), False
+
+
+def _claims(facts: list[dict], subject: str):
+    """Everything said about `subject`: (verb, what, negated, facts that say it, inherited?)."""
+    kinds = {subject: []}
+    for kind, path in ancestors(facts, subject).items():
+        kinds[kind] = path
+    for f in facts:
+        who = rsn.head(f["subj"])
+        if who in kinds:
+            for verb, what, neg in _properties(f):
+                yield verb, what, neg, kinds[who] + [f], who != subject
+
+
+def check_claim(facts: list[dict], text: str):
+    """Answer "Does X <verb> Y?" from what I know about X, and about the kinds X belongs to.
+
+    Returns (verdict, facts_used) or None. Verdicts: "yes" (X's own fact), "inherited" (a kind X
+    belongs to has it: a good rule, not a proof), "no" (a fact denies it), and "not known" (I know
+    what X does with that verb but Y isn't part of it: "not as far as I know", never a bare no).
+    Nothing known about X with that verb gives None.
     """
     words = tokenize(text)
     if len(words) < 4 or words[0] not in _AUX:
         return None
-    for verb in {f["rel"].split()[0] for f in facts if f["rel"] not in ("be", "be called")}:
+    verbs = {v for f in facts for v, _, _ in _properties(f)}
+    for verb in verbs:
         if verb not in words[2:-1]:
             continue
         at = words.index(verb, 2)
         if {"and", "or", "both", "either"} & set(words[1:at]):
             continue  # several subjects: not a question about one thing
         subject, asked = rsn.head(" ".join(words[1:at])), words[at + 1:]
-        about = [f for f in facts if f["rel"].split()[0] == verb and rsn.head(f["subj"]) == subject]
         wanted = {stem(w) for w in asked if w not in STOPWORDS}
-        if not about or not wanted:
+        claims = [c for c in _claims(facts, subject) if c[0] == verb]
+        if not claims or not wanted:
             continue
-        for f in about:
-            if wanted <= {stem(t) for t in tokenize(f["obj"])}:
-                return ("no" if f["neg"] else "yes"), [f]
-        return "not known", [f for f in about if not f["neg"]] or about
+        for _, what, neg, used, inherited in sorted(claims, key=lambda c: c[4]):
+            if wanted <= {stem(t) for t in tokenize(what)}:
+                return ("no" if neg else "inherited" if inherited else "yes"), used
+        direct = [c[3][-1] for c in claims if not c[4]]
+        return ("not known", direct) if direct else None
     return None
 
 

@@ -658,6 +658,11 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         steps = [{"kind": "fact", "text": rsn.state(f), "source": f["source"], "sentence": f["text"]}
                  for f in used]
         know = " ".join(rsn.state(f) for f in used)
+        if said == "inherited":
+            links = [rsn.state(f).rstrip(".") for f in used]
+            steps.append({"kind": "inference", "source": "my reasoning",
+                          "text": f"Kinds pass on what they are like, but there can be exceptions"})
+            return "Probably yes. " + ", and ".join([links[0]] + [self._lower(l) for l in links[1:]]) + ".", 0.7, steps
         if said == "yes":
             return f"Yes. {know}", 0.9, steps
         if said == "no":

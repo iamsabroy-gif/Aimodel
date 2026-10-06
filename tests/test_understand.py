@@ -81,3 +81,27 @@ class TestClaimsAndComparisons(unittest.TestCase):
         self.assertTrue(reply.startswith("The mimbat and the quillet are both animals"))
         self.assertNotIn("lorpan", reply)
         self.assertIsNone(self.ask("What do cats and glorbs have in common?"))
+
+
+class TestInheritedProperties(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.m = benchmark_model()
+
+    def ask(self, q):
+        return self.m.respond(q, learn=False)[0]
+
+    def test_a_kind_passes_on_what_it_is_like(self):
+        reply = self.ask("Does a quillet have feathers?")
+        self.assertTrue(reply.startswith("Probably yes"))
+        self.assertIn("The quillet is a bird", reply)
+        self.assertIn("birds are animals that have feathers", reply)
+
+    def test_it_does_not_borrow_from_unrelated_kinds(self):
+        reply = self.ask("Does the mimbat have feathers?") or ""
+        self.assertFalse(reply.startswith(("Yes", "Probably yes")))
+
+    def test_own_facts_still_win_and_unknown_things_are_declined(self):
+        self.assertTrue(self.ask("Does the quillet eat seeds?").startswith("Yes"))
+        self.assertTrue(self.ask("Do birds have feathers?").startswith("Yes"))
+        self.assertIsNone(self.ask("Does the glorb have feathers?"))
