@@ -11,3 +11,6 @@ person plus 40 more made-up people), not your data. A writer trained on this lea
 from evidence.
 Train with:  python -m aimodel.train_writer --data sample_data --out writer.npz
 Rebuild with: python -m aimodel.sample_data --out sample_data
+
+sample_qa.csv     38 general-knowledge question/answer pairs to try in the app: Train tab -> choose
+                   this file. (Not for the writer; train_writer ignores it.)
