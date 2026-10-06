@@ -325,27 +325,28 @@ fix was training that swaps nearly every name for a made-up or different word, s
 
 The built-in benchmark uses a made-up world, so it flatters the model. `python -m aimodel.devset <folder>` scores it on
 real Wikipedia introductions and `--misses` lists what it got wrong (add `--vectors builtin` to use word vectors;
-the scorer starts from a blank model, so they are off unless you ask). There are six sets in `sample_data/devset`
-to `devset6` (about 50 questions each, written before the model was run; about 10 of each are unanswerable and should
+the scorer starts from a blank model, so they are off unless you ask). There are seven sets in `sample_data/devset`
+to `devset7` (about 50 questions each, written before the model was run; about 10 of each are unanswerable and should
 be declined). Answerable questions right, with word vectors:
 
 | set | right | wrongly answered | declined correctly | status |
 |---|---|---|---|---|
 | devset | 38/42 (90%) | 3 | 10/10 | tuned on, and the ranking was learned from it |
-| devset2 | 37/44 (84%) | 4 | 10/10 | tuned on, and learned from |
-| devset3 | 34/45 (76%) | 6 | 10/10 | tuned on a little, and learned from |
+| devset2 | 38/44 (86%) | 3 | 10/10 | tuned on, and learned from |
+| devset3 | 34/45 (76%) | 7 | 10/10 | tuned on a little, and learned from |
 | devset4 | 37/43 (86%) | 4 | 9/10 | tuned on, and learned from |
 | devset5 | 35/45 (78%) | 3 | 9/10 | held out while the ranking was learned; scored again since |
-| devset6 | **38/48 (79%)** | 6 (5 without vectors) | 9/10 (10/10 without) | **clean holdout, scored once, misses unread** |
+| devset6 | 48/48 (100%) | 0 | 10/10 | its misses were read and fixed (it was a clean 79% before): tuned on |
+| devset7 | **38/47 (81%)** | 1 | 8/10 | **clean holdout, scored once, misses unread** (74% / 10 of 10 without vectors) |
 
-Read the last row. The same code from before the real-text work (commit `3b984fe`, no vectors) scored 31/48 on
-devset6, so the whole series of fixes took that held-out set from 65% to 79% and declining from 8/10 to 10/10, with
-fewer wrong answers (7 to 5). On devset6 word vectors added nothing (38/48 either way) and cost one wrong answer
-and one "should have declined"; across devset4 to devset6 they are a small net gain, so they stay on by default but
-are not a big lever. The learned ranking put the answer sentence first in 31 of 40 questions on devset6, up from 22
-(mean reciprocal rank 0.83, up from 0.70). Typical misses on text it has not seen: a sentence that answers from a
-different angle than the question, vocabulary ("husbandry" for "keeping bees"), and answers spread over two
-sentences. Each set's misses get read once it has been scored, so devset6's are left unread for now.
+Read the last row. Devset7 is the honest one: on its five unseen articles the code before the devset6 fixes
+scored 34/47 (72%) with vectors and 30/47 (64%) without; after them 38/47 (81%) and 35/47 (74%), with fewer
+wrong answers (3 to 1 with vectors, 4 to 2 without) and one more decline in the vectors run (7 to 8 of 10). So the
+devset6 fixes carried over to new text, but modestly: about 4 questions out of 47, not the 79% to 100% that devset6
+itself shows. The fixes were general rules (not per-question answers): "he/she" resolved to the person a biography
+is about, dates in brackets kept for "when" questions, other forms of a word (die/died, teach/educated), and a word
+that only a vector says is rare no longer counts as the question's key word. Earlier in this file's history,
+devset6 scored 38/48 before its misses were read; devset7's misses are left unread for now.
 
 ## How it ranks sentences
 

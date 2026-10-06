@@ -22,7 +22,7 @@ SYNONYMS = {
 # often use different ones ("What do penguins eat?" / "Most penguins feed on krill").
 FAMILIES = [
     "eat feed consume devour diet herbivorous carnivorous omnivorous herbivore carnivore omnivore",
-    "live inhabit dwell reside habitat found range",
+    "live inhabit dwell reside habitat found range native indigenous endemic",
     "tall height high elevation tallest highest",
     "long length lengthy",
     "big large huge size sized biggest largest area",
@@ -37,7 +37,7 @@ FAMILIES = [
     "use utilize purpose",
     "begin start originate source headwaters",
     "die death dead killed",
-    "discover find locate",
+    "discover find",
     "first earliest initial",
     "climb ascend ascent",
     "defend protect defence defense",
@@ -60,7 +60,8 @@ FAMILIES = [
     "begin began begun",
     "break broke broken",
     "write wrote written",
-    "teach taught",
+    "teach taught educate educated train trained instruct instructed tutor tutored",
+    "baby young offspring juvenile calf cub joey pup",
     "fly flew flown",
     "draw drew drawn",
     "drive drove driven",

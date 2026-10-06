@@ -86,6 +86,9 @@ PERSONAL = {"i", "me", "my", "mine", "myself", "i'm"}
 
 
 _KEEPABLE = re.compile(r"\(([a-z][a-z ,'-]{2,40})\)")  # "(primarily floral nectar)", not "(Apis mellifera)" or "(5 ft)"
+# "(15 April 1452 – 2 May 1519)", "(1368–1644)", "(born 1879)": the dates of a person or an era are the answer
+_DATES = re.compile(r"\(\s*(?:born |died |c\. |circa )?(?:\d{1,2}\s+[A-Za-z]+\s+)?\d{3,4}"
+                    r"(?:\s*[–-]\s*(?:\d{1,2}\s+[A-Za-z]+\s+)?\d{3,4})?\s*\)")
 
 
 def clean(sentence: str, keep_short: bool = False) -> str:
@@ -102,6 +105,7 @@ def clean(sentence: str, keep_short: bool = False) -> str:
             kept.append(m.group(0))
             return f"\x00{len(kept) - 1}\x00"
         sentence = _KEEPABLE.sub(hold, sentence)
+        sentence = _DATES.sub(lambda m: (kept.append(m.group(0)), f"\x00{len(kept) - 1}\x00")[1], sentence)
     previous = None
     while previous != sentence:  # nested asides: "(from Latin: x (y) z)"
         previous = sentence

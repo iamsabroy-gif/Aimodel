@@ -50,7 +50,8 @@ GENERIC = {"value", "thing", "way", "number", "part", "type", "kind", "example",
 WEAK_WORDS = {"live", "work", "make", "use", "do", "go", "get", "need", "want", "call", "mean",
               "come", "take", "give", "find", "know", "happen", "start", "begin", "name", "tell",
               "work", "long", "many", "much", "old", "big", "small", "good", "bad", "tall", "deep", "wide",
-              "percentage", "percent", "amount", "have", "has", "had", "be", "high", "heavy", "fast", "often", "far"}
+              "percentage", "percent", "amount", "have", "has", "had", "be", "plant", "animal", "country", "city",
+              "place", "high", "heavy", "fast", "often", "far"}
 # Verbs that read naturally as "What do I <verb>?".
 TRANSITIVE = {"like", "love", "hate", "prefer", "want", "need", "own", "enjoy", "study", "play",
               "eat", "drive", "speak", "teach", "learn", "know", "build", "write", "use", "have",

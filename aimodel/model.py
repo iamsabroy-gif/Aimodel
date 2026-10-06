@@ -104,10 +104,17 @@ _LENGTH_UNITS = re.compile(r"\d[\d,.]*\s*(?:square\s+|cubic\s+|sq\s+)?(m|km|cm|m
                            re.I)
 _WHERE_HINT = re.compile(r"\b(lies|lie|located|situated|found|lives|live|inhabit\w*|stands|flows|borders|between|"
                          r"north|south|east|west|scattered|distributed|throughout|native|across|spread|occurs?|"
-                         r"widespread|range)\b", re.I)
+                         r"widespread|range|indigenous|endemic|inhabit\w*|where)\b", re.I)
 
 
 _DENIES = re.compile(r"\b(not|no|never|none|cannot|neither|nor|only|except|unlike|without|rarely)\b|n't", re.I)
+def _speaks_as_i(sentence: str) -> bool:
+    """First person ("I like it") but not a name with a numeral ("Francis I")."""
+    return bool(_FIRST_PERSON.search(re.sub(r"\b[A-Z][a-z]+\s+(I{1,3}|IV|V|VI{0,3})\b", "", sentence)))
+
+
+_LIFE_WORDS = {"born", "birth", "die", "died", "death", "dead", "bear"}
+_PERSON = re.compile(r"\(\s*(?:born\s+)?(?:\d{1,2}\s+\w+\s+)?\d{3,4}\s*[–-]|\bborn\b")
 _FIRST_PERSON = re.compile(r"\b(I|me|my|mine|we|our|you|your)\b")
 _EXPLETIVE = re.compile(r"\b(makes?|made|find|finds|found|think|thinks)\s+it\b|\bit\s+(is|was|seems|appears|has been)\s+\w+\s+(to|that)\b"
                         r"|\bit\s+(is|was)\s+(not\s+)?(known|said|believed|thought|estimated|reported|clear)\b", re.I)
@@ -387,17 +394,21 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         text is being read for.
         """
         fresh, parsed, promote, last_subject = [], {}, [], topic
-        about = topic
+        about, person_name = topic, None
         if topic is None:
             first = next(iter(split_sentences(text, min_words=3)), "")
             lead = re.match(r"^(?:(?:The|A|An)\s+)?((?:[\w'-]+\s+){0,3}?[\w'-]+?)\s*(?:\(|\b(?:is|are|was|were)\b)", first)
             if lead and lead.group(1).split()[0].lower() in _NOT_A_SUBJECT:
                 lead = None  # "To plant a seed is easy" / "In 1889 it was..." name nothing
             last_subject = lead.group(1) if lead and len(lead.group(1).split()) <= 4 else None
+            if _PERSON.search(first):  # a biography: "he/she" can be named too
+                person_name = (os.path.splitext(os.path.basename(source))[0].replace("_", " ")
+                               if not source.startswith("http") else None) or last_subject
             article = re.match(r"^(The|A|An)\s", first)
             about = (f"{article.group(1)} {last_subject}" if article and last_subject else last_subject)
         for pos, s in enumerate(split_sentences(text, min_words=2 if source == "you said" else 3)):
-            s = self._name_the_subject(s, last_subject, about if pos and source != "you said" else None)
+            s = self._name_the_subject(s, last_subject, about if pos and source != "you said" else None,
+                                       person_name if pos and source != "you said" else None)
             hint = last_subject
             fact = rsn.extract_fact(s, topic=hint)
             if fact:
@@ -437,7 +448,8 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         return len(studied)
 
     @staticmethod
-    def _name_the_subject(sentence: str, subject: str | None, about: str | None = None) -> str:
+    def _name_the_subject(sentence: str, subject: str | None, about: str | None = None,
+                          person: str | None = None) -> str:
         """Say who "it" is: "It lies in the Himalayas." -> "Mount Everest lies in the Himalayas."
 
         Answers are looked up sentence by sentence, so a sentence that only says "it" can never be found
@@ -445,6 +457,17 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         the sentence before it. `about` (what the whole text is about) also fills in a later "it":
         "At 7,088 km long, it is the longest river" -> "..., the Nile is the longest river".
         """
+        if person and not _speaks_as_i(sentence):
+            named = " ".join(person.split())
+            if re.match(r"^(He|She)\s", sentence):
+                return f"{named} " + sentence.split(" ", 1)[1]
+            if re.match(r"^His\s", sentence):
+                return f"{named}'s " + sentence.split(" ", 1)[1]
+            words = {w.lower() for w in re.findall(r"[A-Za-z']+", sentence)}
+            if (words & {"he", "she", "him", "his"} and not words & {"it", "they", "them"}
+                    and named.split()[0].lower() not in words
+                    and re.search(r",\s+(he|she)\b", sentence, re.I)):  # "Upon his invitation, he spent..."
+                return re.sub(r"\b(he|she|him)\b", named, sentence, count=1, flags=re.I)
         if subject and len(subject.split()) <= 4 and not _EXPLETIVE.search(sentence):
             name = " ".join(subject.split())
             if re.match(r"^(Its|Their)\s", sentence):
@@ -453,7 +476,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
                 return f"{name} " + sentence.split(" ", 1)[1]
         same = bool(subject and about and subject.split()[-1].lower() == about.split()[-1].lower())
         fronted = bool(re.search(r",\s+(it|they)\b", sentence, re.I))  # "At 7,088 km long, it is..."
-        if about and len(about.split()) <= 4 and (same or fronted) and not _FIRST_PERSON.search(sentence):
+        if about and len(about.split()) <= 4 and (same or fronted) and not _speaks_as_i(sentence):
             name = " ".join(about.split())
             if re.match(r"(?i)(a|an)\s", name):
                 name = "the " + name.split(" ", 1)[1]
@@ -574,6 +597,8 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         """The word plus words that mean nearly the same (from the networks)."""
         if word not in self._expand_cache:
             out = {stem(word)} | {stem(w) for w in family(word)}
+            if len(family(word)) > 1:  # a word with stand-ins: "die" also means "died", "dies"
+                out |= {stem(f) for w in family(word) for f in (w + "d", w + "ed", w + "s", w + "ing")}
             if self.pretrained is not None and self.vector_settings["expand"]:
                 cfg = self.vector_settings
                 out |= {stem(w) for w, s in self.pretrained.similar(word, cfg["k"]) if s >= cfg["min"]}
@@ -598,7 +623,9 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         df = self._df_cache[1] if n else Counter()
 
         def rarity(w):  # how few sentences have the word (or a near synonym); never-seen words are rarest
-            return max((math.log((n + 1) / (1 + df.get(v, 0))) for v in wanted[w]), default=99.0)
+            # a word is only as rare as its commonest stand-in ("summit" is not rare because a vector says
+            # it is like "meeting", which I never read)
+            return min((math.log((n + 1) / (1 + df.get(v, 0))) for v in wanted[w]), default=99.0)
         return max([w for w in wanted if w not in WEAK_WORDS] or wanted, key=rarity)
 
     def answer_from_knowledge(self, text: str, max_sentences: int = 3, bonus=None):
@@ -637,6 +664,9 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
                 continue
             k = self.knowledge[i]
             context = {w for w, alts in wanted.items() if alts & self._topic_of(k["source"])}
+            if (_WHEN.match(text) or re.search(r"\b(born|birth)\b", text, re.I)) and _PERSON.search(k["text"]):
+                # "Name (15 April 1452 - 2 May 1519) was..." says when they were born and died
+                covered |= {w for w, alts in wanted.items() if alts & _LIFE_WORDS}
             if content and not (covered | context) & content:
                 continue  # it must be about something the question asks about, not just a filler word
             if quantity and not (amount.search(k["text"]) and _has_dimension(text, stems[i])):

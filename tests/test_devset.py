@@ -105,3 +105,51 @@ class TestRealTextRules(unittest.TestCase):
     def test_how_long_to_live_asks_for_a_time_not_a_length(self):
         text = "Calves rely on their mothers for as long as three years. Elephants can live up to 70 years."
         self.assertIn("70 years", self.ask(text, "How long can elephants live?"))
+
+
+BIO = ("Leonardo da Vinci (15 April 1452 – 2 May 1519) was an Italian polymath of the High Renaissance. "
+       "Born out of wedlock in Vinci in Tuscany, he was educated in Florence by the painter Verrocchio. "
+       "Upon the invitation of Francis I, he spent his last three years in France, where he died in 1519. "
+       "Revered for his ingenuity, he conceptualised flying machines.")
+
+
+class TestPeople(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.m = LearningModel(seed=0)
+        cls.m.add_document(BIO, "Leonardo_da_Vinci.txt")
+
+    def ask(self, q):
+        return self.m.respond(q, learn=False)[0]
+
+    def test_he_is_the_person_the_text_is_about(self):
+        texts = [k["text"] for k in self.m.knowledge]
+        self.assertIn("Upon the invitation of Francis I, Leonardo da Vinci spent his last three years in France, "
+                      "where he died in 1519.", texts)  # "Francis I" is a name, not "I"
+        self.assertTrue(any(t.startswith("Born out of wedlock") and "Leonardo da Vinci was educated" in t
+                            for t in texts))
+
+    def test_dates_in_brackets_answer_when_questions(self):
+        self.assertIn("1452", self.ask("When was Leonardo da Vinci born?"))
+        self.assertIn("(15 April 1452 – 2 May 1519)", self.ask("When was Leonardo da Vinci born?"))
+
+    def test_where_and_who_questions_use_the_sentence_about_it(self):
+        self.assertIn("France", self.ask("Where did Leonardo da Vinci die?"))
+        self.assertIn("Verrocchio", self.ask("Who taught Leonardo da Vinci?"))
+        self.assertIn("flying machines", self.ask("What did Leonardo conceptualise?"))
+
+    def test_a_vector_stand_in_does_not_make_a_word_rare(self):
+        m = LearningModel(seed=0)
+        m.load_builtin_vectors()
+        m.add_document("Mount Fuji is an active stratovolcano with a summit elevation of 3,776 m.", "fuji.txt")
+        m.add_document("Oxygen is a colorless gas at standard temperature and pressure.", "oxygen.txt")
+        self.assertIsNone(m.respond("What is the temperature at Mount Fuji?", learn=False)[0])
+        # "summit" has a vector stand-in ("meeting") that I never read; that must not make it the rarest word
+        key = m._key_word(m._wanted("What is the temperature at the summit of Mount Fuji?"))
+        self.assertEqual(key, "temperature")
+
+    def test_a_unit_at_the_end_of_a_sentence_is_not_an_abbreviation(self):
+        from aimodel.text import split_sentences
+        self.assertEqual(split_sentences("It rises to 3,776 m. Water boils there at a lower temperature."),
+                         ["It rises to 3,776 m.", "Water boils there at a lower temperature."])
+        self.assertEqual(len(split_sentences("Use a tool, e.g. a hammer, to do it.")), 1)

@@ -69,7 +69,8 @@ def split_sentences(text: str, min_words: int = 3, max_chars: int = 400) -> list
             continue
         pieces = []
         for piece in _SENT_RE.split(line):
-            if pieces and _ABBREV.search(pieces[-1]):  # "e.g. this" isn't a new sentence
+            if pieces and _ABBREV.search(pieces[-1]) and not re.search(r"\d\s[A-Za-z]\.$", pieces[-1]):
+                # "e.g. this" isn't a new sentence, but "3,776 m. Water" is
                 pieces[-1] += " " + piece
             else:
                 pieces.append(piece)
