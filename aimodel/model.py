@@ -49,7 +49,8 @@ from .reasoning import stem
 from .smalltalk import SmallTalkMixin
 from .study import GENERIC as _GENERIC, WEAK_WORDS, StudyMixin, bare as _bare
 from .text import TfidfIndex, keywords, looks_like_question, split_sentences, tokenize
-from .understand import members, members_question, understand
+from .understand import (check_claim, common_question, in_common, members, members_question,
+                         understand)
 from .vectors import PretrainedVectors
 from .writer import WriterMixin
 
@@ -575,8 +576,13 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             found = members(self.facts, *asked)
             if found:
                 return self._list_members(found, asked[1])
+        pair = common_question(text)
+        if pair:
+            shared = self._in_common(*pair)
+            if shared:
+                return shared
         if kind == "yesno":
-            proof = self._prove_either(text) or self._prove(text)
+            proof = self._prove_either(text) or self._prove(text) or self._check_claim(text)
             if proof:
                 return proof
         if kind == "why":
@@ -642,6 +648,44 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
                 if step.get("sentence") in features:
                     step["features"] = features[step["sentence"]]
         return " ".join(parts), confidence, steps
+
+    def _check_claim(self, text: str):
+        """"Does the lorpan eat meat?" from what I know about what the lorpan eats."""
+        claim = check_claim(self.facts, text)
+        if claim is None:
+            return None
+        said, used = claim
+        steps = [{"kind": "fact", "text": rsn.state(f), "source": f["source"], "sentence": f["text"]}
+                 for f in used]
+        know = " ".join(rsn.state(f) for f in used)
+        if said == "yes":
+            return f"Yes. {know}", 0.9, steps
+        if said == "no":
+            return f"No. {know}", 0.9, steps
+        steps.append({"kind": "inference", "source": "my reasoning",
+                      "text": "What I know about this doesn't include it, so I answer 'not as far as I know'"})
+        return f"No, not as far as I know. {know}", 0.55, steps
+
+    def _in_common(self, a: str, b: str):
+        """"What do mammals and birds have in common?": the nearest kind they both are."""
+        found = in_common(self.facts, a, b)
+        if not found:
+            return None
+        kind, path_a, path_b = found
+        names = [" ".join(tokenize(x)) for x in (a, b)]
+        plural = kind if kind.endswith("s") else kind + ("es" if kind.endswith(("sh", "ch", "x")) else "s")
+        last = (path_a or path_b)[-1]["obj"].lower()
+        if kind == "thing" and "living" in last:
+            plural = "living things"
+        reply = f"{names[0].capitalize()} and {names[1]} are both {plural}."
+        steps, seen = [], set()
+        for f in path_a + path_b:
+            if f["text"] not in seen:
+                seen.add(f["text"])
+                steps.append({"kind": "fact", "text": rsn.state(f), "source": f["source"], "sentence": f["text"]})
+        steps.append({"kind": "inference", "source": "my reasoning",
+                      "text": f"Both lead to '{kind}' through is-a facts"})
+        return reply, 0.8, steps
 
     def _prove_either(self, text: str):
         """"Is the mimbat a bird or a mammal?": say which one I can prove."""

@@ -363,10 +363,13 @@ not regressions.
 100%; "I don't know" 100%; wrong 3%; invented words 0%; harder questions 50%; corrupted drafts caught
 100%; good drafts wrongly rejected 0%; greetings 100% / 0% false; own-question recall 97%; writer passes
 90% (82% with new names). Since then it fixes typos ("Whre") and synonyms ("dwell"), lists members ("Which animals are birds?",
-"Name all the birds.") and answers either/or questions ("Is it a bird or a mammal?"); the harder set grew
-from 6 to 10 questions and it passes 8 (80%). Still missed today: "Does the lorpan eat meat?" (it can't say
-no from not knowing) and "What do mammals and birds have in common?". `train_writer --size large`
-(about 7M parameters) is available for a bigger writer, but it only rewords answers; it does not add reasoning.
+"Name all the birds."), answers either/or questions ("Is it a bird or a mammal?"), says "No, not as far as I
+know" to "Does the lorpan eat meat?" (naming what it does know, never guessing about things it has never heard
+of) and finds what two things share ("What do mammals and birds have in common?"). The harder set grew from 6
+to 13 questions and it passes 11 (85%). Still missed today: properties inherited from a kind ("Does a quillet
+have feathers?" because birds do) and comparisons ("What is the difference between a mimbat and a quillet?").
+`train_writer --size large` (about 7M parameters) is available for a bigger writer, but it only rewords
+answers; it does not add reasoning.
 
 ## Commands
 

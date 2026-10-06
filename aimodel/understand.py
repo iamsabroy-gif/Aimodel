@@ -125,3 +125,83 @@ def members(facts: list[dict], category: str, cls: str) -> list[dict]:
         kept = [f for f in found if rsn.isa_chain(facts, rsn.head(f["subj"]), category)]
         found = kept or found
     return found
+
+
+# ------------------------------------------------------------ "Does the lorpan eat meat?"
+_AUX = ("do", "does", "did", "can", "could")
+
+
+def check_claim(facts: list[dict], text: str):
+    """Answer "Does X <verb> Y?" from what I know about X's <verb>.
+
+    Returns (verdict, facts_used) or None. "yes" if a fact says so, "no" if a fact denies it,
+    and "not known" if I know what X does with that verb but Y isn't part of it (an honest
+    "not as far as I know", never a bare no). Nothing at all known about X's verb gives None.
+    """
+    words = tokenize(text)
+    if len(words) < 4 or words[0] not in _AUX:
+        return None
+    for verb in {f["rel"].split()[0] for f in facts if f["rel"] not in ("be", "be called")}:
+        if verb not in words[2:-1]:
+            continue
+        at = words.index(verb, 2)
+        if {"and", "or", "both", "either"} & set(words[1:at]):
+            continue  # several subjects: not a question about one thing
+        subject, asked = rsn.head(" ".join(words[1:at])), words[at + 1:]
+        about = [f for f in facts if f["rel"].split()[0] == verb and rsn.head(f["subj"]) == subject]
+        wanted = {stem(w) for w in asked if w not in STOPWORDS}
+        if not about or not wanted:
+            continue
+        for f in about:
+            if wanted <= {stem(t) for t in tokenize(f["obj"])}:
+                return ("no" if f["neg"] else "yes"), [f]
+        return "not known", [f for f in about if not f["neg"]] or about
+    return None
+
+
+# ------------------------------------------------- "What do mammals and birds have in common?"
+_COMMON = re.compile(r"\b(in common|alike|similar|the same)\b")
+
+
+def common_question(text: str):
+    """Pull the two things out of "What do X and Y have in common?" / "How are X and Y alike?"."""
+    low = " ".join(tokenize(text))
+    if not _COMMON.search(low):
+        return None
+    low = re.sub(r"^(what|how)\s+(do|does|is|are|can)\s+", "", low)
+    low = re.sub(r"\s+(have|share|has)?\s*(in common|alike|similar|the same)\b.*$", "", low)
+    low = re.sub(r"^(both|common between|common to)\s+", "", low)
+    parts = [p.strip() for p in re.split(r"\s+(?:and|with|to)\s+", low) if p.strip()]
+    return (parts[0], parts[1]) if len(parts) == 2 else None
+
+
+def ancestors(facts: list[dict], start: str) -> dict[str, list[dict]]:
+    """Everything `start` is, with the is-a facts that lead there (nearest first)."""
+    edges: dict[str, list] = {}
+    for f in facts:
+        if f["rel"] in ("be", "be called") and not f["neg"]:
+            a, b = rsn.head(f["subj"]), rsn.head(f["obj"])
+            if a and b and a != b:
+                edges.setdefault(a, []).append((b, f))
+    found: dict[str, list[dict]] = {}
+    frontier = [(start, [])]
+    for _ in range(5):
+        nxt = []
+        for node, path in frontier:
+            for b, f in edges.get(node, ()):
+                if b not in found and b != start:
+                    found[b] = path + [f]
+                    nxt.append((b, found[b]))
+        frontier = nxt
+    return found
+
+
+def in_common(facts: list[dict], a: str, b: str):
+    """The nearest thing both a and b are, as (kind, path_a, path_b), or None."""
+    ha, hb = rsn.head(a), rsn.head(b)
+    up_a, up_b = ancestors(facts, ha), ancestors(facts, hb)
+    shared = [k for k in up_a if k in up_b]
+    if not shared:
+        return None
+    best = min(shared, key=lambda k: (len(up_a[k]) + len(up_b[k]), k))
+    return best, up_a[best], up_b[best]

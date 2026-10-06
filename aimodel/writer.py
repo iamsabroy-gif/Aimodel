@@ -29,7 +29,7 @@ from .text import keywords, split_sentences, tokenize
 GLUE = {"also", "addition", "top", "first", "then", "after", "finally", "next", "reason", "because",
         "yes", "probably", "here", "here's", "involves", "sure", "exact", "found", "prove",
         "can't", "cannot", "short", "means", "that's", "which", "so", "while", "both",
-        "together", "other", "words", "summary", "overall", "however", "too", "well"}
+        "together", "other", "words", "summary", "overall", "however", "too", "well", "far"}
 MAX_LOG = 2000
 
 
