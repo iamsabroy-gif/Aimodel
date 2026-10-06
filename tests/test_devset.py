@@ -45,3 +45,27 @@ class TestRealText(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestWhoIsIt(unittest.TestCase):
+    name = staticmethod(LearningModel._name_the_subject)
+
+    def test_a_later_it_is_the_subject_of_the_text(self):
+        self.assertEqual(self.name("At 7,088 km long, it is the longest river.", "The Nile", "The Nile"),
+                         "At 7,088 km long, the Nile is the longest river.")
+        self.assertEqual(self.name("Reaching 30 m long and weighing 190 t, it is the largest animal.",
+                                   "blue whale", "The blue whale"),
+                         "Reaching 30 m long and weighing 190 t, the blue whale is the largest animal.")
+
+    def test_it_is_left_alone_when_it_may_mean_something_else(self):
+        for sentence, subject, about in [
+                ("The siphon is used for respiration and it helps.", "The siphon", "An octopus"),
+                ("It is thought to be old.", "The Nile", "The Nile"),
+                ("I like it.", "The Nile", "The Nile"),
+                ("To plant a seed, dig a hole, then cover it with soil.", None, None)]:
+            self.assertEqual(self.name(sentence, subject, about), sentence)
+
+    def test_a_how_to_is_not_rewritten(self):
+        m = LearningModel(seed=0)
+        m.add_document("To plant a seed, dig a small hole. Place the seed inside. Cover it with soil.", "h.txt")
+        self.assertTrue(any("Cover it with soil" in k["text"] for k in m.knowledge))

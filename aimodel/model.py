@@ -89,14 +89,26 @@ _MEASURED = re.compile(r"\d[\d,.]*\s*" + _UNITS + r"(?![a-z])|\b(?:one|two|three
 _AGE_UNITS = re.compile(r"(\d[\d,.]*|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|hundred|thousand|"
                         r"million|billion)\b)[- ]*(years?|centuries|century|decades?|mya|months|days)\b", re.I)
 _WEIGHT_UNITS = re.compile(r"\d[\d,.]*\s*(kg|g|lb|t|tonnes?|tons?|kilograms?|pounds?)\b", re.I)
-_LENGTH_UNITS = re.compile(r"\d[\d,.]*\s*(m|km|cm|mm|ft|mi|metres?|meters?|kilomet(?:re|er)s?|miles?|feet|foot|inch(?:es)?)\b",
+_LENGTH_UNITS = re.compile(r"\d[\d,.]*\s*(?:square\s+|cubic\s+|sq\s+)?(m|km|cm|mm|ft|mi|metres?|meters?|kilomet(?:re|er)s?|miles?|feet|foot|inch(?:es)?)\b",
                            re.I)
 _WHERE_HINT = re.compile(r"\b(lies|lie|located|situated|found|lives|live|inhabit\w*|stands|flows|borders|between|"
                          r"north|south|east|west)\b", re.I)
 
 
 _DENIES = re.compile(r"\b(not|no|never|none|cannot|neither|nor|only|except|unlike|without|rarely)\b|n't", re.I)
+_FIRST_PERSON = re.compile(r"\b(I|me|my|mine|we|our|you|your)\b")
+_EXPLETIVE = re.compile(r"\b(makes?|made|find|finds|found|think|thinks)\s+it\b|\bit\s+(is|was|seems|appears|has been)\s+\w+\s+(to|that)\b"
+                        r"|\bit\s+(is|was)\s+(not\s+)?(known|said|believed|thought|estimated|reported|clear)\b", re.I)
+_NOT_A_SUBJECT = {"to", "how", "if", "when", "in", "on", "at", "by", "for", "with", "after", "before", "first",
+                  "step", "then", "next", "there", "here", "this", "that", "these", "those", "what", "why", "where"}
+_DIMENSION = re.compile(r"^\W*how\s+(tall|deep|wide|high|long|big|large|heavy|fast)\b", re.I)
 _SEVERAL = re.compile(r"\b(and|also|both|as well)\b|,", re.I)
+
+
+def _has_dimension(text: str, stems: set[str]) -> bool:
+    """"How deep...?" wants a sentence that talks about depth, not any sentence with a length in it."""
+    m = _DIMENSION.match(text)
+    return not m or bool({stem(w) for w in family(m.group(1))} & stems)
 
 
 def _amount_pattern(text: str):
@@ -328,12 +340,17 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         text is being read for.
         """
         fresh, parsed, promote, last_subject = [], {}, [], topic
+        about = topic
         if topic is None:
             first = next(iter(split_sentences(text, min_words=3)), "")
-            lead = re.match(r"^(?:(?:The|A|An)\s+)?((?:[A-Z][\w'-]*\s+){0,3}[A-Z]?[\w'-]+)\s*(?:\(|,|\b(?:is|are|was|were)\b)", first)
+            lead = re.match(r"^(?:(?:The|A|An)\s+)?((?:[\w'-]+\s+){0,3}?[\w'-]+?)\s*(?:\(|\b(?:is|are|was|were)\b)", first)
+            if lead and lead.group(1).split()[0].lower() in _NOT_A_SUBJECT:
+                lead = None  # "To plant a seed is easy" / "In 1889 it was..." name nothing
             last_subject = lead.group(1) if lead and len(lead.group(1).split()) <= 4 else None
+            article = re.match(r"^(The|A|An)\s", first)
+            about = (f"{article.group(1)} {last_subject}" if article and last_subject else last_subject)
         for pos, s in enumerate(split_sentences(text, min_words=2 if source == "you said" else 3)):
-            s = self._name_the_subject(s, last_subject)
+            s = self._name_the_subject(s, last_subject, about if pos and source != "you said" else None)
             hint = last_subject
             fact = rsn.extract_fact(s, topic=hint)
             if fact:
@@ -373,19 +390,38 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         return len(studied)
 
     @staticmethod
-    def _name_the_subject(sentence: str, subject: str | None) -> str:
-        """"It lies in the Himalayas." after a sentence about Mount Everest -> "Mount Everest lies...".
+    def _name_the_subject(sentence: str, subject: str | None, about: str | None = None) -> str:
+        """Say who "it" is: "It lies in the Himalayas." -> "Mount Everest lies in the Himalayas."
 
-        Answers are looked up sentence by sentence, so a sentence that only says "It" can never be found
-        by asking about the thing it is about.
+        Answers are looked up sentence by sentence, so a sentence that only says "it" can never be found
+        by asking about the thing it is about. A sentence that *starts* with It/They takes the subject of
+        the sentence before it. `about` (what the whole text is about) also fills in a later "it":
+        "At 7,088 km long, it is the longest river" -> "..., the Nile is the longest river".
         """
-        if not subject or len(subject.split()) > 4:
-            return sentence
-        name = " ".join(subject.split())
-        if re.match(r"^(Its|Their)\s", sentence):
-            return f"{name}'s " + sentence.split(" ", 1)[1]
-        if re.match(r"^(It|They)\s", sentence):
-            return f"{name} " + sentence.split(" ", 1)[1]
+        if subject and len(subject.split()) <= 4 and not _EXPLETIVE.search(sentence):
+            name = " ".join(subject.split())
+            if re.match(r"^(Its|Their)\s", sentence):
+                return f"{name}{chr(39) if name.endswith('s') else chr(39) + 's'} " + sentence.split(" ", 1)[1]
+            if re.match(r"^(It|They)\s", sentence):
+                return f"{name} " + sentence.split(" ", 1)[1]
+        same = bool(subject and about and subject.split()[-1].lower() == about.split()[-1].lower())
+        fronted = bool(re.search(r",\s+(it|they)\b", sentence, re.I))  # "At 7,088 km long, it is..."
+        if about and len(about.split()) <= 4 and (same or fronted) and not _FIRST_PERSON.search(sentence):
+            name = " ".join(about.split())
+            if re.match(r"(?i)(a|an)\s", name):
+                name = "the " + name.split(" ", 1)[1]
+            plural = name.split()[-1].lower().endswith("s") and not name.lower().endswith(("ss", "us", "is"))
+            pronouns = ("they", "their") if plural else ("it", "its")
+            other = ("it", "its") if plural else ("they", "their")
+            words = {w.lower() for w in re.findall(r"[A-Za-z']+", sentence)}
+            if (words & set(pronouns) and not words & set(other)
+                    and name.split()[-1].lower() not in words and not _EXPLETIVE.search(sentence)):
+                def fill(m: re.Match) -> str:
+                    word = m.group(0).lower()
+                    text = name[0].upper() + name[1:] if m.start() == 0 else name[0].lower() + name[1:] \
+                        if re.match(r"(?i)the\s", name) else name
+                    return text + (("'" if text.endswith("s") else "'s") if word in ("its", "their") else "")
+                return re.sub(r"\b(it|its|they|their)\b", fill, sentence, flags=re.I)
         return sentence
 
     def note(self, text: str) -> list[dict]:
@@ -535,7 +571,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             context = {w for w, alts in wanted.items() if alts & self._topic_of(k["source"])}
             if content and not (covered | context) & content:
                 continue  # it must be about something the question asks about, not just a filler word
-            if quantity and not amount.search(k["text"]):
+            if quantity and not (amount.search(k["text"]) and _has_dimension(text, stems[i])):
                 continue  # "How tall is...?" needs a sentence that gives an amount
             web_source = k["source"].startswith("http")
             feats = [tfidf[i], meaning[i], len(covered) / len(wanted),
@@ -571,7 +607,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         # Nepal" is not answered by a sentence that only mentions Nepal.
         together = any(content <= (c["covered"] | c["context"]) for c in chosen)  # one sentence says it all
         one_source = len({self.knowledge[c["i"]]["source"] for c in chosen}) == 1
-        if (coverage < 0.5 or self._key_word(wanted) not in covered
+        if (coverage < 0.5 or self._key_word(wanted) not in (covered | about)
                 or confidence < self.knowledge_threshold
                 or (0 < len(content) <= 3 and not content <= (covered | about))
                 or (1 < len(content) <= 3 and not together and not one_source and not _SEVERAL.search(text))):
@@ -593,7 +629,8 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         amount = _amount_pattern(text)
         cands = []
         for f in self.facts:
-            if quantity and not amount.search(f["text"]):
+            if quantity and not (amount.search(f["text"])
+                                 and _has_dimension(text, {stem(t) for t in tokenize(f["text"])})):
                 continue
             stems = {stem(t) for t in tokenize(f"{f['subj']} {f['verb']} {f['obj']}")}
             covered = {w for w, alts in wanted.items() if alts & stems}

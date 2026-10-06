@@ -318,15 +318,17 @@ answerable and 10 not) and `--misses` lists what it got wrong. The code was tune
 
 | | before | after |
 |---|---|---|
-| devset, answerable questions right | 28/42 (67%) | 35/42 (83%) |
-| devset, unanswerable correctly declined | 6/10 | 10/10 |
-| devset2 (held out during tuning), right | 23/44 (52%) | 26/44 (59%) |
-| devset2, unanswerable correctly declined | 9/10 | 10/10 |
+| devset (tuned on), answerable right | 28/42 (67%) | 35/42 (83%) |
+| devset2 (tuned on later), answerable right | 23/44 (52%) | 32/44 (73%) |
+| devset3 (untouched when first scored), answerable right | 29/45 (64%) | 29/45 (64%) |
+| devset3, answered wrongly | 10 | 4 |
+| unanswerable correctly declined, devset / devset2 / devset3 | 6/10, 9/10, 9/10 | 10/10, 10/10, 9/10 |
 
-The gap between 83% and 59% is the honest size of the overfitting. Typical misses on text it has not seen:
-a sentence that says "it" about the topic when the question asks about "the Nile", "How long is...?" when the
-text says "length", and questions whose answer is spread over two sentences. devset2's misses have now been
-read, so use new articles for the next honest test.
+The honest reading is the devset3 row: on articles the code had never seen it answered no more questions
+correctly than before, but it gave far fewer wrong answers (it says "I don't know" instead). The gains on
+devset and devset2 are mostly tuning. What blocks it now is vocabulary: the question says "moons" and the text
+"natural satellites", "sink" and "sank", "carry" and "equipped with". Pretrained word vectors (`/vectors`) are the
+next step. Each set's misses have been read, so use new articles for the next honest test.
 
 ## Evaluating it from time to time
 

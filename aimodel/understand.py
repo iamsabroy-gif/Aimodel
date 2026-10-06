@@ -25,7 +25,7 @@ FAMILIES = [
     "live inhabit dwell reside habitat found range",
     "tall height high elevation tallest highest",
     "long length lengthy",
-    "big large huge size sized biggest largest",
+    "big large huge size sized biggest largest area",
     "small little tiny smallest",
     "old age aged",
     "deep depth",
