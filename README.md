@@ -309,6 +309,18 @@ fix was training that swaps nearly every name for a made-up or different word, s
 | `/writer load <file>` | use a writer you trained |
 | `/writer on` / `off` | switch it on or off |
 
+## Files it can read
+
+`/read <file>` in the terminal, and the app's **Train** tab, accept:
+
+- **Text** (`.txt`), **CSV / TSV / JSON / JSONL** (question/answer columns become taught replies).
+- **Markdown** (`.md`): the symbols are removed and the words kept: headings and code blocks are skipped, links
+  keep their text, bullets become sentences, and a table row becomes a fact ("Emperor: Height 1.1 m, Weight 35 kg.").
+- **PDF** (`.pdf`): needs one extra package, `pip install pypdf` (pure Python, so it also works in Termux). Lines broken
+  at the page margin are joined, hyphenated words are repaired, and headers, footers and page numbers that repeat on
+  most pages are dropped. A scanned PDF with no text layer can't be read (that needs OCR); password-protected and
+  damaged files give a clear message instead of an error.
+
 ## Checking it on real text
 
 The built-in benchmark uses a made-up world, so it flatters the model. `python -m aimodel.devset <folder>` scores it on

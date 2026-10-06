@@ -7,6 +7,8 @@ import io
 import json
 from typing import Callable, Iterable
 
+from .documents import MARKDOWN, extract, markdown_to_text
+
 # Column / key names that mark a question-and-answer dataset, in order of preference.
 PROMPT_KEYS = ("prompt", "question", "instruction", "input", "query", "q", "user", "human")
 REPLY_KEYS = ("response", "answer", "output", "reply", "completion", "a", "assistant", "bot")
@@ -67,20 +69,29 @@ def parse(name: str, content: str) -> dict:
                                  or _pick(rows[0], TEXT_KEYS)):
             result = (_from_records(rows), "CSV" if ext == "csv" else "TSV")
     if result is None:
+        if ext in ("md", "markdown", "mdown", "mkd"):
+            return {"pairs": [], "text": markdown_to_text(content), "format": "markdown"}
         return {"pairs": [], "text": content, "format": "plain text"}
     parsed, label = result
     parsed["format"] = label
     return parsed
 
 
-def import_dataset(model, name: str, content: str,
+def import_dataset(model, name: str, content: str | bytes,
                    progress: Callable[[int, int, str], None] | None = None) -> dict:
     """Teach `model` from a dataset. Returns what it learned.
 
     Question/answer rows become taught replies; prose is read like a document.
     `progress(done, total, message)` is called as it goes.
     """
+    is_pdf = name.lower().endswith(".pdf")
+    if is_pdf:
+        content = extract(name, content)  # raises DocumentError with advice if it can't be read
+    elif isinstance(content, bytes):
+        content = content.decode("utf-8", errors="replace")
     data = parse(name, content)
+    if is_pdf:
+        data["format"] = "PDF"
     pairs = data["pairs"][:MAX_PAIRS]
     total = len(pairs) + (1 if data["text"].strip() else 0)
     learned = 0

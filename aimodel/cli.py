@@ -6,6 +6,7 @@ import argparse
 import os
 import urllib.error
 
+from .documents import DocumentError
 from .model import LearningModel
 from .reports import run_user_quiz, show_curiosity, show_exam, show_progress, show_sleep
 
@@ -30,7 +31,7 @@ Greetings (hello, how are you, thanks, bye - I already know many):
   teaches me which replies you like.
 
 Your data and the internet:
-  /read <file or url>             learn from a text file or web page
+  /read <file or url>             learn from a text, markdown or PDF file (PDF needs: pip install pypdf) or a web page
   /web <question>                 look something up on Wikipedia and answer
   /online on|off                  allow automatic web lookups (now: {online})
   /why                            show my reasoning for the last answer
@@ -177,6 +178,9 @@ def main(argv: list[str] | None = None) -> None:
                     n = model.read(arg)
                 except (FileNotFoundError, IsADirectoryError, PermissionError) as e:
                     print(f"ai> I couldn't open that file: {e}")
+                    continue
+                except DocumentError as e:
+                    print(f"ai> {e}")
                     continue
                 except _NET_ERRORS as e:
                     print(f"ai> I couldn't fetch that page: {e}")

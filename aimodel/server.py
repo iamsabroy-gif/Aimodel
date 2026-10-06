@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import binascii
 import hmac
 import json
 import mimetypes
@@ -19,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from .datasets import import_dataset
+from .documents import DocumentError
 from .model import LearningModel
 
 APP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app")
@@ -117,6 +120,8 @@ class AppState:
                     self.save()
                 total = self.job.state["total"] or 1
                 self.job.state.update(result=result, message="Done", done=total, total=total)
+            except DocumentError as e:
+                self.job.state.update(error=str(e))
             except NET_ERRORS as e:
                 self.job.state.update(error=f"Couldn't reach it: {e}")
             except Exception as e:  # keep the server alive; show the problem in the app
@@ -127,7 +132,7 @@ class AppState:
         threading.Thread(target=run, daemon=True).start()
         return True
 
-    def add_dataset(self, name: str, text: str) -> bool:
+    def add_dataset(self, name: str, text: str | bytes) -> bool:
         return self.start_job("dataset", lambda progress: import_dataset(self.model, name, text, progress))
 
     def add_url(self, url: str) -> bool:
@@ -300,6 +305,12 @@ def make_handler(state: AppState, token: str | None):
                     if not text("url").startswith(("http://", "https://")):
                         raise ValueError("The link must start with http:// or https://")
                     started = state.add_url(text("url"))
+                elif text("base64"):  # a file the browser could not read as text (a PDF)
+                    try:
+                        raw = base64.b64decode(str(b["base64"]), validate=False)
+                    except (binascii.Error, ValueError):
+                        raise ValueError("That file didn't arrive properly.") from None
+                    started = state.add_dataset(text("name") or "document", raw)
                 elif text("text"):
                     started = state.add_dataset(text("name") or "pasted text", str(b["text"]))
                 else:

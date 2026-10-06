@@ -84,8 +84,8 @@ label.sw{display:flex;justify-content:space-between;align-items:center;padding:8
   <section id="train">
     <div class="card">
       <h2>Add a dataset</h2>
-      <p>Text, CSV, JSON or JSONL. Files with question/answer columns (question, answer, prompt, response, instruction, output…) become taught replies; anything else is read as knowledge.</p>
-      <label class="file"><input type="file" id="file" accept=".txt,.md,.csv,.tsv,.json,.jsonl,.ndjson,text/*" multiple hidden>Tap to choose files</label>
+      <p>Text, markdown, PDF, CSV, JSON or JSONL. Files with question/answer columns (question, answer, prompt, response, instruction, output…) become taught replies; anything else is read as knowledge.</p>
+      <label class="file"><input type="file" id="file" accept=".txt,.md,.markdown,.pdf,.csv,.tsv,.json,.jsonl,.ndjson,text/*" multiple hidden>Tap to choose files</label>
       <textarea id="paste" placeholder="…or paste text here" style="margin-top:10px"></textarea>
       <div class="row"><button class="primary" id="addPaste">Learn pasted text</button></div>
       <div class="row"><input id="url" type="url" placeholder="…or a web page link (https://)"><button class="secondary" id="addUrl" style="flex:none">Read</button></div>
@@ -268,8 +268,13 @@ async function start(path, body) {
 }
 $("file").onchange = async (e) => {
   for (const f of e.target.files) {
-    const text = await f.text();
-    await start("/api/dataset", {name: f.name, text});
+    if (/\.pdf$/i.test(f.name)) {  // a PDF is binary: send it as base64
+      const bytes = new Uint8Array(await f.arrayBuffer());
+      let bin = ""; for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      await start("/api/dataset", {name: f.name, base64: btoa(bin)});
+    } else {
+      await start("/api/dataset", {name: f.name, text: await f.text()});
+    }
     while (polling) await new Promise((r) => setTimeout(r, 500));
   }
   e.target.value = "";

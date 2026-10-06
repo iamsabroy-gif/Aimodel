@@ -49,6 +49,7 @@ from .reasoning import stem
 from .smalltalk import SmallTalkMixin
 from .study import GENERIC as _GENERIC, WEAK_WORDS, StudyMixin, bare as _bare
 from .text import STOPWORDS, TfidfIndex, keywords, looks_like_question, split_sentences, tokenize
+from .documents import extract
 from .understand import (check_claim, common_question, family, in_common, members, members_question,
                          understand)
 from .vectors import PretrainedVectors
@@ -496,8 +497,9 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         """Learn from a local file or a web page."""
         if re.match(r"https?://", path_or_url):
             return self.add_document(web.fetch_page(path_or_url, get=self.fetch), path_or_url)
-        with open(os.path.expanduser(path_or_url), encoding="utf-8", errors="replace") as f:
-            return self.add_document(f.read(), os.path.basename(path_or_url))
+        with open(os.path.expanduser(path_or_url), "rb") as f:  # text, markdown or PDF
+            data = f.read()
+        return self.add_document(extract(path_or_url, data), os.path.basename(path_or_url))
 
     def search_web(self, query: str) -> int:
         """Look `query` up on Wikipedia and learn from the results."""
