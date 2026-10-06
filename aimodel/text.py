@@ -17,7 +17,7 @@ that these those it its i you he she they we me my mine your yours our their his
 her them us as if then than so such can could would should will shall may might
 must there here about into over under up down out just also very tell please know
 explain define describe give some any all more most much many s t don't what's
-who's it's i'm
+who's it's i'm themselves itself himself herself yourself myself ourselves
 """.split())
 
 _QUESTION_WORDS = ("what", "who", "whom", "whose", "which", "when", "where", "why",

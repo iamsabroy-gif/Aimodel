@@ -81,13 +81,16 @@ _STOP_OBJ = {"which", "who", "whom", "because", "while", "whereas", "although", 
 _KIND_OF = {"type", "kind", "sort", "form", "member", "species", "group", "part", "example"}
 _CHUNK_END = {"that", "which", "who", "used", "with", "of", "in", "for", "by", "to", "from",
               "and", "or", "on", "at", "as", "into", "using", "when", "where", "called"}
-_TOKEN = re.compile(r"[A-Za-z0-9][\w'’\-]*|[,;:]")
+_TOKEN = re.compile(r"\d+(?:,\d{3})+(?:\.\d+)?[\w'’\-]*|[A-Za-z0-9][\w'’\-]*|[,;:]")  # "8,848" is one number
 PERSONAL = {"i", "me", "my", "mine", "myself", "i'm"}
 
 
 def clean(sentence: str) -> str:
     """Drop parenthetical asides and citation marks like [1]."""
-    sentence = re.sub(r"\s*[\(\[][^\)\]]*[\)\]]", "", sentence)
+    previous = None
+    while previous != sentence:  # nested asides: "(from Latin: x (y) z)"
+        previous = sentence
+        sentence = re.sub(r"\s*[\(\[][^\(\)\[\]]*[\)\]]", "", sentence)
     return " ".join(sentence.split())
 
 
@@ -323,7 +326,8 @@ def question_kind(text: str) -> str:
         return "what"
     if words[0] == "why":
         return "why"
-    if words[0] == "how" and (len(words) < 2 or words[1] not in {"many", "much", "old", "long", "far", "big"}):
+    if words[0] == "how" and (len(words) < 2 or words[1] not in {"many", "much", "old", "long", "far", "big", "tall", "high", "deep", "wide", "fast",
+                                                         "heavy", "large", "often", "hot", "cold", "small", "short"}):
         return "how"
     if words[0] in BE | {"do", "does", "did", "can", "could", "has", "have"}:
         return "yesno"

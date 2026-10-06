@@ -18,6 +18,49 @@ SYNONYMS = {
     "produce": "make", "produces": "make",
     "purpose": "use", "utilize": "use", "utilizes": "use",
 }
+# Words that mean nearly the same when asking about something. A question and the text that answers it
+# often use different ones ("What do penguins eat?" / "Most penguins feed on krill").
+FAMILIES = [
+    "eat feed consume devour diet",
+    "live inhabit dwell reside habitat found range",
+    "tall height high elevation tallest highest",
+    "long length lengthy",
+    "big large huge size sized biggest largest",
+    "small little tiny smallest",
+    "old age aged",
+    "deep depth",
+    "wide width broad",
+    "heavy weigh weight mass",
+    "fast speed quick rapid",
+    "make produce create manufacture generate",
+    "build construct erect",
+    "use utilize purpose",
+    "begin start originate source headwaters",
+    "die death dead killed",
+    "discover find locate",
+    "first earliest initial",
+    "climb ascend ascent",
+    "defend protect defence defense",
+    "kind type species sort",
+    "known called named",
+    "similar alike",
+    "area region location",
+    "danger hazard risk threat",
+    "buy purchase",
+]
+_FAMILY_OF: dict[str, set[str]] = {}
+for _group in FAMILIES:
+    _words = set(_group.split())
+    for _w in _words:
+        _FAMILY_OF.setdefault(_w, set()).update(_words)
+
+
+def family(word: str) -> set[str]:
+    """The word and the words that mean nearly the same ("tall" -> tall, height, high...)."""
+    low = word.lower()
+    return _FAMILY_OF.get(low) or _FAMILY_OF.get(stem(low)) or {low}
+
+
 _WORDS = re.compile(r"[A-Za-z']+")
 _GENERIC = {"thing", "things", "one", "ones", "kind", "kinds", "type", "types", "item", "items"}
 

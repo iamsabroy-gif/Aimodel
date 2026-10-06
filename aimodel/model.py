@@ -48,8 +48,8 @@ from .ranker import FeedbackRanker
 from .reasoning import stem
 from .smalltalk import SmallTalkMixin
 from .study import GENERIC as _GENERIC, WEAK_WORDS, StudyMixin, bare as _bare
-from .text import TfidfIndex, keywords, looks_like_question, split_sentences, tokenize
-from .understand import (check_claim, common_question, in_common, members, members_question,
+from .text import STOPWORDS, TfidfIndex, keywords, looks_like_question, split_sentences, tokenize
+from .understand import (check_claim, common_question, family, in_common, members, members_question,
                          understand)
 from .vectors import PretrainedVectors
 from .writer import WriterMixin
@@ -76,6 +76,42 @@ _INTRO = re.compile(r"\b(example|following|below|follows|like this|shown)\b[^.!?
 
 _CONNECTORS = ("Also, ", "On top of that, ", "In addition, ")
 _STEPS = ("First, ", "Then, ", "After that, ", "Finally, ")
+
+
+_QUANTITY = re.compile(r"^\W*how\s+(many|much|old|long|tall|big|far|deep|wide|fast|heavy|high|large|often|hot|cold)\b"
+                       r"|\b(percentage|percent)\b", re.I)
+_NUMBER = re.compile(r"\d|\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|hundred|thousand|"
+                     r"million|billion|half|double|dozen)\b", re.I)
+_UNITS = (r"(?:m|km|cm|mm|ft|mi|kg|g|lb|t|tonnes?|tons?|metres?|meters?|kilomet(?:re|er)s?|miles?|feet|foot|"
+          r"inch(?:es)?|kilograms?|pounds?|years?|mya|days?|hours?|minutes?|degrees?|%|percent)")
+_MEASURED = re.compile(r"\d[\d,.]*\s*" + _UNITS + r"(?![a-z])|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|"
+                       r"hundred|thousand|million|billion)\b[- ]" + _UNITS + r"\b", re.I)
+_AGE_UNITS = re.compile(r"(\d[\d,.]*|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|hundred|thousand|"
+                        r"million|billion)\b)[- ]*(years?|centuries|century|decades?|mya|months|days)\b", re.I)
+_WEIGHT_UNITS = re.compile(r"\d[\d,.]*\s*(kg|g|lb|t|tonnes?|tons?|kilograms?|pounds?)\b", re.I)
+_LENGTH_UNITS = re.compile(r"\d[\d,.]*\s*(m|km|cm|mm|ft|mi|metres?|meters?|kilomet(?:re|er)s?|miles?|feet|foot|inch(?:es)?)\b",
+                           re.I)
+_WHERE_HINT = re.compile(r"\b(lies|lie|located|situated|found|lives|live|inhabit\w*|stands|flows|borders|between|"
+                         r"north|south|east|west)\b", re.I)
+
+
+_DENIES = re.compile(r"\b(not|no|never|none|cannot|neither|nor|only|except|unlike|without|rarely)\b|n't", re.I)
+_SEVERAL = re.compile(r"\b(and|also|both|as well)\b|,", re.I)
+
+
+def _amount_pattern(text: str):
+    """What an answer to "How old/tall/heavy/many...?" has to contain."""
+    m = re.match(r"^\W*how\s+(\w+)", text, re.I)
+    word = m.group(1).lower() if m else ""
+    if word == "many" or word == "much" or word == "often":
+        return _NUMBER
+    if word == "old" or (word == "long" and re.search(r"\b(live|lives|last|lasts|survive|lifespan|take|takes)\b", text, re.I)):
+        return _AGE_UNITS
+    if word == "heavy":
+        return _WEIGHT_UNITS
+    if word in ("tall", "long", "high", "deep", "wide", "far", "big", "large"):
+        return _LENGTH_UNITS
+    return _MEASURED
 
 
 class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
@@ -106,6 +142,8 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         self._expand_cache: dict = {}
         self._names_cache = (-1, set())
         self._vocab_cache = (None, set())
+        self._df_cache = (0, Counter())
+        self._topic_cache = (-1, {})
         self.last_match: int | None = None
         self.last_query: str | None = None
         self.last_reply: str | None = None
@@ -290,7 +328,12 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         text is being read for.
         """
         fresh, parsed, promote, last_subject = [], {}, [], topic
+        if topic is None:
+            first = next(iter(split_sentences(text, min_words=3)), "")
+            lead = re.match(r"^(?:(?:The|A|An)\s+)?((?:[A-Z][\w'-]*\s+){0,3}[A-Z]?[\w'-]+)\s*(?:\(|,|\b(?:is|are|was|were)\b)", first)
+            last_subject = lead.group(1) if lead and len(lead.group(1).split()) <= 4 else None
         for pos, s in enumerate(split_sentences(text, min_words=2 if source == "you said" else 3)):
+            s = self._name_the_subject(s, last_subject)
             hint = last_subject
             fact = rsn.extract_fact(s, topic=hint)
             if fact:
@@ -328,6 +371,22 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             self.neural.train([tokenize(e["text"]) for e in studied], epochs=5, min_pairs=3000)
             self._maybe_grow()
         return len(studied)
+
+    @staticmethod
+    def _name_the_subject(sentence: str, subject: str | None) -> str:
+        """"It lies in the Himalayas." after a sentence about Mount Everest -> "Mount Everest lies...".
+
+        Answers are looked up sentence by sentence, so a sentence that only says "It" can never be found
+        by asking about the thing it is about.
+        """
+        if not subject or len(subject.split()) > 4:
+            return sentence
+        name = " ".join(subject.split())
+        if re.match(r"^(Its|Their)\s", sentence):
+            return f"{name}'s " + sentence.split(" ", 1)[1]
+        if re.match(r"^(It|They)\s", sentence):
+            return f"{name} " + sentence.split(" ", 1)[1]
+        return sentence
 
     def note(self, text: str) -> list[dict]:
         """Remember facts you state in chat ("My sister lives in Delhi")."""
@@ -374,11 +433,26 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             added += self.add_document(text, url, topic=title, focus=query)
         return added
 
+    def _topic_of(self, source: str) -> set[str]:
+        """What a text is about: the words of its name and of its first sentence ("Octopus.txt")."""
+        size = len(self.knowledge)
+        if self._topic_cache[0] != size:
+            self._topic_cache = (size, {})
+        cache = self._topic_cache[1]
+        if source not in cache:
+            first = next((k["text"] for k in self.knowledge if k["source"] == source), "")
+            name = os.path.splitext(os.path.basename(source))[0].replace("_", " ")
+            lead = " ".join(first.split()[:12])
+            words = [t for t in tokenize(f"{name} {lead}") if t not in STOPWORDS]
+            cache[source] = {stem(f) for t in words for f in (t, t + "s", t + "es")}  # "octopus" ~ "octopuses"
+        return cache[source]
+
     def _knowledge_index(self):
         size = len(self.knowledge)
         if self._tfidf_cache is None or self._tfidf_cache[0] != size:
             toks = [tokenize(k["text"]) for k in self.knowledge]
-            stems = [{stem(t) for t in tk} for tk in toks]
+            stems = [{stem(t) for t in tk} | {stem(t[:-2]) for t in tk if len(t) > 6 and t.endswith("ed")}
+                     for tk in toks]  # "eight-limbed" also counts as "limb"
             self._tfidf_cache = (size, TfidfIndex(toks), toks, stems)
         _, index, toks, stems = self._tfidf_cache
         key = (size, self.neural.version)
@@ -400,7 +474,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
     def _expand(self, word: str) -> set[str]:
         """The word plus words that mean nearly the same (from the networks)."""
         if word not in self._expand_cache:
-            out = {stem(word)}
+            out = {stem(word)} | {stem(w) for w in family(word)}
             if self.pretrained is not None:
                 out |= {stem(w) for w, s in self.pretrained.similar(word, 15) if s >= 0.6}
             if len(self.neural) >= 5000:
@@ -418,11 +492,13 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         An answer that doesn't cover it isn't about the question at all, e.g.
         photosynthesis text mentioning "work" for "How do vaccines work?".
         """
-        index = self._knowledge_index()[0] if self.knowledge else None
-        def rarity(w):
-            if index is None:
-                return 0.0
-            return max((index.idf.get(v, 99.0) for v in wanted[w]), default=99.0)
+        n = len(self.knowledge)
+        if n and self._df_cache[0] != n:
+            self._df_cache = (n, Counter(w for doc in self._knowledge_index()[2] for w in doc))
+        df = self._df_cache[1] if n else Counter()
+
+        def rarity(w):  # how few sentences have the word (or a near synonym); never-seen words are rarest
+            return max((math.log((n + 1) / (1 + df.get(v, 0))) for v in wanted[w]), default=99.0)
         return max([w for w in wanted if w not in WEAK_WORDS] or wanted, key=rarity)
 
     def answer_from_knowledge(self, text: str, max_sentences: int = 3, bonus=None):
@@ -446,19 +522,30 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         definition = re.compile(r"\b(%s)\w*\s+(is|are|was|were|refers|means|consists)\b" % topic, re.I)
         about = re.compile(r"^(the |a |an )?(\w+ )?(%s)\w*\b" % topic, re.I)  # topic is the subject
 
+        quantity = bool(_QUANTITY.search(text))
+        amount = _amount_pattern(text)
+        content = {w for w in wanted if w not in WEAK_WORDS}
+        where = bool(re.match(r"^\W*where\b", text, re.I))
         cands = []
         for i in (int(i) for i in np.argsort(-base)[:60]):
             covered = {w for w, alts in wanted.items() if alts & stems[i]}
             if not covered:
                 continue
             k = self.knowledge[i]
+            context = {w for w, alts in wanted.items() if alts & self._topic_of(k["source"])}
+            if content and not (covered | context) & content:
+                continue  # it must be about something the question asks about, not just a filler word
+            if quantity and not amount.search(k["text"]):
+                continue  # "How tall is...?" needs a sentence that gives an amount
             web_source = k["source"].startswith("http")
             feats = [tfidf[i], meaning[i], len(covered) / len(wanted),
-                     float(k.get("pos", 99) < 2), float(bool(definition.search(k["text"]))),
+                     float(k.get("pos", 99) < 2), float(bool(definition.search(rsn.clean(k["text"])))),
                      min(1.0, len(toks[i]) / 40), float(not web_source), float(web_source)]
             score = (base[i] + 0.1 * feats[3] + 0.1 * feats[4] + (bonus(i, feats[2]) if bonus else 0.0)
-                     + 0.1 * bool(about.search(k["text"])) - 0.3 * bool(_INTRO.search(k["text"])))
-            cands.append({"i": i, "score": float(score), "covered": covered, "features": feats})
+                     + 0.1 * bool(about.search(rsn.clean(k["text"]))) - 0.3 * bool(_INTRO.search(k["text"]))
+                     + 0.15 * (where and bool(_WHERE_HINT.search(k["text"]))))
+            cands.append({"i": i, "score": float(score), "covered": covered, "context": context,
+                          "features": feats})
         if not cands:
             return None
         for c, adj in zip(cands, self.ranker.adjust([c["features"] for c in cands])):
@@ -470,18 +557,24 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         while cands and len(chosen) < max_sentences:
             c = max(cands, key=lambda c: c["score"] + 0.15 * len(c["covered"] - covered))
             cands.remove(c)
-            new_terms = c["covered"] - covered
+            new_terms = (c["covered"] - covered) & (content or c["covered"])
             if chosen and (not new_terms or c["score"] < 0.5 * top):
                 continue
             chosen.append(c)
             covered |= new_terms
 
-        coverage = len(covered) / len(wanted)
+        about = set().union(*(c["context"] for c in chosen))  # what the whole text is about, e.g. "Octopus"
+        coverage = len(covered | about) / len(wanted)
         confidence = float(min(1.0, top)) * (0.4 + 0.6 * coverage)
         # The evidence has to mention the question's key word and at least
-        # half of what you asked about.
+        # half of what you asked about. A short question must be covered in full: "the population of
+        # Nepal" is not answered by a sentence that only mentions Nepal.
+        together = any(content <= (c["covered"] | c["context"]) for c in chosen)  # one sentence says it all
+        one_source = len({self.knowledge[c["i"]]["source"] for c in chosen}) == 1
         if (coverage < 0.5 or self._key_word(wanted) not in covered
-                or confidence < self.knowledge_threshold):
+                or confidence < self.knowledge_threshold
+                or (0 < len(content) <= 3 and not content <= (covered | about))
+                or (1 < len(content) <= 3 and not together and not one_source and not _SEVERAL.search(text))):
             return None
         trace = [{"kind": "evidence", "text": self.knowledge[c["i"]]["text"],
                   "source": self.knowledge[c["i"]]["source"], "pos": self.knowledge[c["i"]].get("pos", 0),
@@ -496,8 +589,12 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         if not wanted or not self.facts:
             return [], 0.0
         personal = bool(rsn.PERSONAL & set(tokenize(text)))
+        quantity = bool(_QUANTITY.search(text))
+        amount = _amount_pattern(text)
         cands = []
         for f in self.facts:
+            if quantity and not amount.search(f["text"]):
+                continue
             stems = {stem(t) for t in tokenize(f"{f['subj']} {f['verb']} {f['obj']}")}
             covered = {w for w, alts in wanted.items() if alts & stems}
             if not covered:
@@ -524,8 +621,11 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
                         broad or (score >= 0.9 * cands[0][0] and f["rel"] == top["rel"])):
                     chosen.append(f)  # also lists: "I like tea" and "I like coffee"
         coverage = len(covered) / len(wanted)
+        content = {w for w in wanted if w not in WEAK_WORDS}
         if coverage < 0.5 or self._key_word(wanted) not in covered:
             return [], 0.0
+        if 0 < len(content) <= 3 and not content <= covered and not _SEVERAL.search(text):
+            return [], 0.0  # "the population of Nepal" is not answered by a fact about a population
         return chosen, coverage
 
     def _prove(self, text: str):
@@ -582,7 +682,8 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             if shared:
                 return shared
         if kind == "yesno":
-            proof = self._prove_either(text) or self._prove(text) or self._check_claim(text)
+            proof = (self._prove_either(text) or self._prove(text) or self._check_claim(text)
+                     or self._said_so(text))
             if proof:
                 return proof
         if kind == "why":
@@ -648,6 +749,24 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
                 if step.get("sentence") in features:
                     step["features"] = features[step["sentence"]]
         return " ".join(parts), confidence, steps
+
+    def _said_so(self, text: str):
+        """"Are octopuses venomous?" when a studied sentence says exactly that (and nothing denies it)."""
+        words = tokenize(text)
+        if len(words) < 3 or words[0] not in rsn.BE:
+            return None
+        wanted = {stem(w) for w in keywords(text)}
+        if len(wanted) < 2:
+            return None
+        for entry in self.knowledge:
+            for clause in re.split(r";|,\s+(?:and|but|though|although|while|whereas)\s+", rsn.clean(entry["text"])):
+                heard = {stem(t) for t in tokenize(clause)}
+                if (wanted <= heard and not _DENIES.search(clause)
+                        and len(clause.split()) <= 30):
+                    step = {"kind": "evidence", "text": entry["text"], "source": entry["source"],
+                            "sentence": entry["text"]}
+                    return (f"Probably yes. {rsn.sentence(clause.strip())}", 0.6, [step])
+        return None
 
     def _check_claim(self, text: str):
         """"Does the lorpan eat meat?" from what I know about what the lorpan eats."""

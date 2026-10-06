@@ -309,6 +309,25 @@ fix was training that swaps nearly every name for a made-up or different word, s
 | `/writer load <file>` | use a writer you trained |
 | `/writer on` / `off` | switch it on or off |
 
+## Checking it on real text
+
+The built-in benchmark uses a made-up world, so it flatters the model. `python -m aimodel.devset` scores it on
+real Wikipedia introductions (`sample_data/devset`, 52 questions written before the model was run, 42
+answerable and 10 not) and `--misses` lists what it got wrong. The code was tuned on that set, so a second set
+(`sample_data/devset2`, 54 questions) was kept aside. Results so far:
+
+| | before | after |
+|---|---|---|
+| devset, answerable questions right | 28/42 (67%) | 35/42 (83%) |
+| devset, unanswerable correctly declined | 6/10 | 10/10 |
+| devset2 (held out during tuning), right | 23/44 (52%) | 26/44 (59%) |
+| devset2, unanswerable correctly declined | 9/10 | 10/10 |
+
+The gap between 83% and 59% is the honest size of the overfitting. Typical misses on text it has not seen:
+a sentence that says "it" about the topic when the question asks about "the Nile", "How long is...?" when the
+text says "length", and questions whose answer is spread over two sentences. devset2's misses have now been
+read, so use new articles for the next honest test.
+
 ## Evaluating it from time to time
 
 `/evaluate` (or `python -m aimodel.evaluation --brain brain.json`) runs one standard scorecard. It keeps a
