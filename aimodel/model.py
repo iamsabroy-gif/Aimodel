@@ -78,7 +78,7 @@ _CONNECTORS = ("Also, ", "On top of that, ", "In addition, ")
 _STEPS = ("First, ", "Then, ", "After that, ", "Finally, ")
 
 
-_QUANTITY = re.compile(r"^\W*how\s+(many|much|old|long|tall|big|far|deep|wide|fast|heavy|high|large|often|hot|cold)\b"
+_QUANTITY = re.compile(r"^\W*(when|what year|in what year)\b|^\W*how\s+(many|much|old|long|tall|big|far|deep|wide|fast|heavy|high|large|often|hot|cold)\b"
                        r"|\b(percentage|percent)\b", re.I)
 _NUMBER = re.compile(r"\d|\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|hundred|thousand|"
                      r"million|billion|half|double|dozen)\b", re.I)
@@ -88,11 +88,22 @@ _MEASURED = re.compile(r"\d[\d,.]*\s*" + _UNITS + r"(?![a-z])|\b(?:one|two|three
                        r"hundred|thousand|million|billion)\b[- ]" + _UNITS + r"\b", re.I)
 _AGE_UNITS = re.compile(r"(\d[\d,.]*|\b(?:one|two|three|four|five|six|seven|eight|nine|ten|twelve|hundred|thousand|"
                         r"million|billion)\b)[- ]*(years?|centuries|century|decades?|mya|months|days)\b", re.I)
+# "How old is X?" wants an age ("4.5 billion years ago", "aged 30"), not any amount of years ("an orbital period of 29 years")
+_OLD_AGE = re.compile(r"\b(years?|centuries|decades|mya|billion|million)\b[^.;]{0,15}\b(old|ago)\b|\bage[d]?\b|"
+                      r"\b(formed|founded|built|born|established|created|began|started|dates? (back )?(to|from)|dated)\b"
+                      r"[^.;]{0,40}\d|\bfor\s+(?:about|around|nearly|over|more than|almost)?\s*\d[\d,.]*\s*(?:years|centuries|millennia)\b", re.I)
+_MANNER = re.compile(r"\b(by|through|via|using)\s+\w+ing\b", re.I)  # "by gathering", "through regurgitation"
+_WHEN = re.compile(r"^\W*(when|what year|in what year)\b", re.I)
+_DATE = re.compile(r"\b\d{3,4}\b|\b(january|february|march|april|may|june|july|august|september|october|november|"
+                   r"december|monday|tuesday|wednesday|thursday|friday|saturday|sunday|morning|afternoon|evening|night|noon|"
+                   r"today|tomorrow|yesterday|spring|summer|autumn|fall|winter)\b|\b\d{1,2}(st|nd|rd|th)\s+century\b|"
+                   r"\bcentur(y|ies)\b|\b\d{1,2}\s*(am|pm)\b", re.I)
 _WEIGHT_UNITS = re.compile(r"\d[\d,.]*\s*(kg|g|lb|t|tonnes?|tons?|kilograms?|pounds?)\b", re.I)
 _LENGTH_UNITS = re.compile(r"\d[\d,.]*\s*(?:square\s+|cubic\s+|sq\s+)?(m|km|cm|mm|ft|mi|metres?|meters?|kilomet(?:re|er)s?|miles?|feet|foot|inch(?:es)?)\b",
                            re.I)
 _WHERE_HINT = re.compile(r"\b(lies|lie|located|situated|found|lives|live|inhabit\w*|stands|flows|borders|between|"
-                         r"north|south|east|west)\b", re.I)
+                         r"north|south|east|west|scattered|distributed|throughout|native|across|spread|occurs?|"
+                         r"widespread|range)\b", re.I)
 
 
 _DENIES = re.compile(r"\b(not|no|never|none|cannot|neither|nor|only|except|unlike|without|rarely)\b|n't", re.I)
@@ -108,16 +119,22 @@ _SEVERAL = re.compile(r"\b(and|also|both|as well)\b|,", re.I)
 def _has_dimension(text: str, stems: set[str]) -> bool:
     """"How deep...?" wants a sentence that talks about depth, not any sentence with a length in it."""
     m = _DIMENSION.match(text)
+    if m and m.group(1).lower() == "long" and re.search(r"\b(live|lives|last|lasts|survive|lifespan|take|takes)\b", text, re.I):
+        return True  # "How long do they live?" asks for a time, not a length
     return not m or bool({stem(w) for w in family(m.group(1))} & stems)
 
 
 def _amount_pattern(text: str):
     """What an answer to "How old/tall/heavy/many...?" has to contain."""
+    if _WHEN.match(text):
+        return _DATE
     m = re.match(r"^\W*how\s+(\w+)", text, re.I)
     word = m.group(1).lower() if m else ""
     if word == "many" or word == "much" or word == "often":
         return _NUMBER
-    if word == "old" or (word == "long" and re.search(r"\b(live|lives|last|lasts|survive|lifespan|take|takes)\b", text, re.I)):
+    if word == "old":
+        return _OLD_AGE
+    if word == "long" and re.search(r"\b(live|lives|last|lasts|survive|lifespan|take|takes)\b", text, re.I):
         return _AGE_UNITS
     if word == "heavy":
         return _WEIGHT_UNITS
@@ -510,7 +527,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             toks = [tokenize(k["text"]) for k in self.knowledge]
             stems = [{stem(t) for t in tk} | {stem(t[:-2]) for t in tk if len(t) > 6 and t.endswith("ed")}
                      for tk in toks]  # "eight-limbed" also counts as "limb"
-            self._tfidf_cache = (size, TfidfIndex(toks), toks, stems)
+            self._tfidf_cache = (size, TfidfIndex([[stem(t) for t in tk] for tk in toks]), toks, stems)
         _, index, toks, stems = self._tfidf_cache
         key = (size, self.neural.version)
         if self._vector_cache is None or self._vector_cache[0] != key:
@@ -573,7 +590,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             return None
         query = keywords(text) or tokenize(text)
         index, toks, stems, own, pre = self._knowledge_index()
-        tfidf = np.array(index.scores(query))
+        tfidf = np.array(index.scores([stem(w) for w in query]))  # the index counts word stems
         meaning = self._meaning(query, own, pre)
         base = self._similarity(tfidf, meaning)
         topic = "|".join(map(re.escape, wanted))
@@ -584,6 +601,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         amount = _amount_pattern(text)
         content = {w for w in wanted if w not in WEAK_WORDS}
         where = bool(re.match(r"^\W*where\b", text, re.I))
+        how = bool(re.match(r"^\W*how\s+(do|does|did|can|could|is|are|to)\b", text, re.I))
         cands = []
         for i in (int(i) for i in np.argsort(-base)[:60]):
             covered = {w for w, alts in wanted.items() if alts & stems[i]}
@@ -601,7 +619,8 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
                      min(1.0, len(toks[i]) / 40), float(not web_source), float(web_source)]
             score = (base[i] + 0.1 * feats[3] + 0.1 * feats[4] + (bonus(i, feats[2]) if bonus else 0.0)
                      + 0.1 * bool(about.search(rsn.clean(k["text"]))) - 0.3 * bool(_INTRO.search(k["text"]))
-                     + 0.15 * (where and bool(_WHERE_HINT.search(k["text"]))))
+                     + 0.15 * (where and bool(_WHERE_HINT.search(k["text"])))
+                     + 0.15 * (how and bool(_MANNER.search(k["text"]))))
             cands.append({"i": i, "score": float(score), "covered": covered, "context": context,
                           "features": feats})
         if not cands:
@@ -664,12 +683,13 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
                 score += 0.3 if rsn.is_personal(f) or f["source"] == "you said" else -0.2
             cands.append((score, covered, f))
         cands.sort(key=lambda c: -c[0])
-        chosen, covered = [], set()
+        chosen, covered, each = [], set(), []
         for score, cov, f in cands:
             if len(chosen) >= 4:
                 break
             if not chosen or (cov - covered and score >= 0.5 * cands[0][0]):
                 chosen.append(f)
+                each.append(cov)
                 covered |= cov
         if chosen:
             top = chosen[0]
@@ -685,6 +705,9 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             return [], 0.0
         if 0 < len(content) <= 3 and not content <= covered and not _SEVERAL.search(text):
             return [], 0.0  # "the population of Nepal" is not answered by a fact about a population
+        if (1 < len(content) <= 3 and not any(content <= cov for cov in each)
+                and len({f["source"] for f in chosen}) > 1 and not _SEVERAL.search(text)):
+            return [], 0.0  # "What do camels eat?" is not answered by a camel fact plus an unrelated eating fact
         return chosen, coverage
 
     def _prove(self, text: str):
@@ -792,7 +815,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         if evidence is not None:
             _, ev_conf, trace = evidence
             confidence = max(confidence, ev_conf)
-            extra = [t for t in trace if t["text"] not in used][:max(0, 3 - len(parts))]
+            extra = [t for t in trace if t["text"] not in used][:max(1 if ev_conf >= 0.5 else 0, 3 - len(parts))]
             for t in extra:
                 prefix = _CONNECTORS[len(parts) % 3] if parts else ""
                 parts.append(self._rephrase(t, prefix))
@@ -1006,7 +1029,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
 
     def _rephrase(self, step: dict, prefix: str = "") -> str:
         """Tidy an evidence sentence and say it from the model's point of view."""
-        text = rsn.clean(step["text"])
+        text = rsn.clean(step["text"], keep_short=True)
         if not step["source"].startswith("http"):
             text = rsn.flip_person(text)
         if prefix:

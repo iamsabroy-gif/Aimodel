@@ -313,21 +313,24 @@ fix was training that swaps nearly every name for a made-up or different word, s
 
 The built-in benchmark uses a made-up world, so it flatters the model. `python -m aimodel.devset <folder>` scores it on
 real Wikipedia introductions and `--misses` lists what it got wrong (add `--vectors builtin` to use word vectors;
-the scorer starts from a blank model, so they are off unless you ask).
-There are four sets in `sample_data/devset`, `devset2`, `devset3` and `devset4` (about 50 questions each, written
-before the model was run; about 10 of each are unanswerable and should be declined). Answerable questions right:
+the scorer starts from a blank model, so they are off unless you ask). There are five sets in `sample_data/devset`
+to `devset5` (about 50 questions each, written before the model was run; about 10 of each are unanswerable and should
+be declined). Answerable questions right, with word vectors:
 
-| set | no vectors | with word vectors | wrongly answered | declined correctly |
+| set | right | wrongly answered | declined correctly | status |
 |---|---|---|---|---|
-| devset (tuned on) | 35/42 (83%) | 38/42 (90%) | 3 | 10/10 |
-| devset2 (tuned on) | 32/44 (73%) | 35/44 (80%) | 5 | 9/10 |
-| devset3 (tuned on, a little) | 29/45 (64%) | 32/45 (71%) | 5 | 9/10 |
-| devset4 (**untouched holdout**, scored once) | 28/43 (65%) | 30/43 (70%) | 6 | 9/10 |
+| devset | 40/42 (95%) | 1 | 10/10 | tuned on |
+| devset2 | 38/44 (86%) | 4 | 10/10 | tuned on |
+| devset3 | 33/45 (73%) | 7 | 9/10 | tuned on, less |
+| devset4 | 37/43 (86%) | 4 | 10/10 | tuned on (was 30/43 before this round) |
+| devset5 | **34/45 (76%)** | 3 | 9/10 | **untouched holdout**, scored once (33/45, 4 wrong, 7/10 before this round) |
 
-Read the last row: on articles it had never seen, word vectors added about 5 points and cost nothing in wrong
-answers. Misses on text it has not seen are mostly vocabulary ("moons" vs "natural satellites", "sink" vs "sank"),
-questions whose answer is spread over two sentences, and facts in brackets. Each set's misses get read once it
-has been scored, so use new articles for the next honest test.
+Read the last row. On articles it had never seen the real gain from the latest fixes was small (33 to 34 right,
+declining 7/10 to 9/10), while the set it was tuned on went from 70% to 86%. Typical misses on text it has not
+seen: a sentence that answers from a different angle than the question ("What is honeycomb made of?" can be
+answered with "made up of hexagonal cells" or with "beeswax"), vocabulary ("husbandry" for "keeping bees",
+"orbital period" for "year"), and questions whose answer is spread over two sentences. Each set's misses get read
+once it has been scored, so use new articles for the next honest test.
 
 ## Word vectors
 

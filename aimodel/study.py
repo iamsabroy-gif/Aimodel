@@ -351,7 +351,7 @@ class StudyMixin:
         if not words:
             return None
         idf = self._knowledge_index()[0].idf if self.knowledge else {}
-        return max(words, key=lambda w: (idf.get(w, 0.0), len(w)))
+        return max(words, key=lambda w: (idf.get(stem(w), 0.0), len(w)))
 
     def _accept_words(self, text: str, exclude=frozenset()) -> list[str]:
         """Stems that would show someone knows the answer (used to grade people)."""

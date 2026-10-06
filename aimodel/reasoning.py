@@ -81,17 +81,35 @@ _STOP_OBJ = {"which", "who", "whom", "because", "while", "whereas", "although", 
 _KIND_OF = {"type", "kind", "sort", "form", "member", "species", "group", "part", "example"}
 _CHUNK_END = {"that", "which", "who", "used", "with", "of", "in", "for", "by", "to", "from",
               "and", "or", "on", "at", "as", "into", "using", "when", "where", "called"}
-_TOKEN = re.compile(r"\d+(?:,\d{3})+(?:\.\d+)?[\w'’\-]*|[A-Za-z0-9][\w'’\-]*|[,;:]")  # "8,848" is one number
+_TOKEN = re.compile(r"\d+(?:,\d{3})*(?:\.\d+)?[\w'’\-]*|[A-Za-z0-9][\w'’\-]*|[,;:]")  # "8,848" is one number
 PERSONAL = {"i", "me", "my", "mine", "myself", "i'm"}
 
 
-def clean(sentence: str) -> str:
-    """Drop parenthetical asides and citation marks like [1]."""
+_KEEPABLE = re.compile(r"\(([a-z][a-z ,'-]{2,40})\)")  # "(primarily floral nectar)", not "(Apis mellifera)" or "(5 ft)"
+
+
+def clean(sentence: str, keep_short: bool = False) -> str:
+    """Drop parenthetical asides and citation marks like [1].
+
+    With `keep_short`, a short plain-words aside such as "(camel milk and meat)" stays, because the answer
+    to a question is sometimes in it.
+    """
+    kept = []
+    if keep_short:
+        def hold(m: re.Match) -> str:
+            if len(m.group(1).split()) > 5:
+                return m.group(0)
+            kept.append(m.group(0))
+            return f"\x00{len(kept) - 1}\x00"
+        sentence = _KEEPABLE.sub(hold, sentence)
     previous = None
     while previous != sentence:  # nested asides: "(from Latin: x (y) z)"
         previous = sentence
         sentence = re.sub(r"\s*[\(\[][^\(\)\[\]]*[\)\]]", "", sentence)
-    return " ".join(sentence.split())
+    sentence = " ".join(sentence.split())
+    for n, aside in enumerate(kept):
+        sentence = sentence.replace(f"\x00{n}\x00", aside)
+    return sentence
 
 
 def stem(word: str) -> str:
@@ -194,7 +212,9 @@ def extract_fact(sentence: str, topic: str | None = None) -> dict | None:
         for n, w in enumerate(rest):
             if w.lower() in _STOP_OBJ or len(obj) >= 20 or w in ";:":
                 break
-            if w == "," and not _list_comma(rest, n):
+            date_comma = (w == "," and n > 0 and n + 1 < len(rest)
+                          and re.fullmatch(r"\d{1,2}", rest[n - 1]) and re.fullmatch(r"\d{4}", rest[n + 1]))
+            if w == "," and not date_comma and not _list_comma(rest, n):  # "October 28, 1886" is one date
                 break
             obj.append(w)
         while obj and obj[-1].lower() in _BAD_END:  # "processes by (which...)" -> "processes"

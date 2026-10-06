@@ -69,3 +69,39 @@ class TestWhoIsIt(unittest.TestCase):
         m = LearningModel(seed=0)
         m.add_document("To plant a seed, dig a small hole. Place the seed inside. Cover it with soil.", "h.txt")
         self.assertTrue(any("Cover it with soil" in k["text"] for k in m.knowledge))
+
+
+class TestRealTextRules(unittest.TestCase):
+    def ask(self, text, question):
+        m = LearningModel(seed=0)
+        m.add_document(text, "t.txt")
+        return m.respond(question, learn=False)[0]
+
+    def test_a_short_aside_in_brackets_stays_in_the_answer(self):
+        reply = self.ask("Bees produce honey by gathering the sugary secretions of plants (primarily floral nectar).",
+                         "How do bees make honey?")
+        self.assertIn("(primarily floral nectar)", reply)
+        self.assertNotIn("Apis", self.ask("Honey is made by bees (Apis mellifera) and stored in hives.",
+                                          "Who makes honey?") or "")
+
+    def test_a_when_question_needs_a_date(self):
+        text = "The statue is a colossal sculpture in New York. The statue was dedicated on October 28, 1886."
+        self.assertIn("1886", self.ask(text, "When was the statue dedicated?"))
+        self.assertIsNone(self.ask("The statue is a colossal sculpture in New York.", "When was the statue dedicated?"))
+
+    def test_how_old_needs_an_age_not_any_number_of_years(self):
+        text = "Saturn is the sixth planet. Saturn orbits the Sun with an orbital period of 29.45 years."
+        self.assertIsNone(self.ask(text, "How old is Saturn?"))
+        self.assertIn("4.5 billion years ago", self.ask(text + " Saturn formed 4.5 billion years ago.",
+                                                        "How old is Saturn?"))
+
+    def test_other_forms_of_a_word_match(self):
+        self.assertIn("Bartholdi", self.ask("The statue was designed by the sculptor Bartholdi.",
+                                            "Who created the statue?"))
+        self.assertIn("1912", self.ask("The Titanic sank in 1912.", "When did the Titanic sink?"))
+        self.assertIn("plantains", self.ask("Cooking bananas are called plantains in some countries.",
+                                            "What is a plantain?"))
+
+    def test_how_long_to_live_asks_for_a_time_not_a_length(self):
+        text = "Calves rely on their mothers for as long as three years. Elephants can live up to 70 years."
+        self.assertIn("70 years", self.ask(text, "How long can elephants live?"))

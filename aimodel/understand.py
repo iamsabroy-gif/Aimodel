@@ -21,7 +21,7 @@ SYNONYMS = {
 # Words that mean nearly the same when asking about something. A question and the text that answers it
 # often use different ones ("What do penguins eat?" / "Most penguins feed on krill").
 FAMILIES = [
-    "eat feed consume devour diet",
+    "eat feed consume devour diet herbivorous carnivorous omnivorous herbivore carnivore omnivore",
     "live inhabit dwell reside habitat found range",
     "tall height high elevation tallest highest",
     "long length lengthy",
@@ -47,6 +47,45 @@ FAMILIES = [
     "area region location",
     "danger hazard risk threat",
     "buy purchase",
+    "color colour hue shade colored coloured",
+    "give gave given gift donate present",
+    "create design invent devise develop establish",
+    "sink sank sunk sinking",
+    "make made making",
+    "build built",
+    "find found",
+    "eat ate eaten",
+    "take took taken",
+    "grow grew grown",
+    "begin began begun",
+    "break broke broken",
+    "write wrote written",
+    "teach taught",
+    "fly flew flown",
+    "draw drew drawn",
+    "drive drove driven",
+    "speak spoke spoken",
+    "know knew known",
+    "see saw seen",
+    "go went gone",
+    "come came",
+    "run ran",
+    "lead led",
+    "bring brought",
+    "catch caught",
+    "hold held",
+    "keep kept",
+    "leave left",
+    "lose lost",
+    "pay paid",
+    "send sent",
+    "spend spent",
+    "stand stood",
+    "swim swam",
+    "win won",
+    "wear wore worn",
+    "carry carried equipped",
+    "moon satellite",
 ]
 _FAMILY_OF: dict[str, set[str]] = {}
 for _group in FAMILIES:
@@ -56,9 +95,22 @@ for _group in FAMILIES:
 
 
 def family(word: str) -> set[str]:
-    """The word and the words that mean nearly the same ("tall" -> tall, height, high...)."""
+    """The word and the words that mean nearly the same ("tall" -> tall, height, high...).
+
+    "created", "creating" and "creates" count as "create".
+    """
     low = word.lower()
-    return _FAMILY_OF.get(low) or _FAMILY_OF.get(stem(low)) or {low}
+    forms = {low, stem(low)}
+    if low.endswith("ed"):
+        forms |= {low[:-2], low[:-1]}
+    if low.endswith("d"):
+        forms.add(low[:-1])
+    if low.endswith("ing") and len(low) > 5:
+        forms |= {low[:-3], low[:-3] + "e"}
+    out: set[str] = set()
+    for form in forms:
+        out |= _FAMILY_OF.get(form, set())
+    return out or {low}
 
 
 _WORDS = re.compile(r"[A-Za-z']+")
