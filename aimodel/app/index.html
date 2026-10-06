@@ -1,0 +1,326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f1115">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/icon.svg">
+<link rel="apple-touch-icon" href="/icon.svg">
+<title>Aimodel</title>
+<style>
+:root{--bg:#0f1115;--panel:#181b22;--panel2:#20242d;--line:#2a2f3a;--text:#e8eaf0;--dim:#8d94a5;
+--accent:#7c9cff;--accent-text:#0b1020;--good:#4cc38a;--bad:#ff6b6b;--warn:#f5b84b}
+@media (prefers-color-scheme: light){:root{--bg:#f5f6f9;--panel:#fff;--panel2:#eef0f5;--line:#dde0e8;
+--text:#161922;--dim:#5d6578;--accent:#3d5bd9;--accent-text:#fff;--good:#1f9d63;--bad:#d64545;--warn:#b7791f}}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+display:flex;flex-direction:column;overscroll-behavior:none}
+header{padding:calc(10px + env(safe-area-inset-top)) 16px 10px;display:flex;align-items:center;gap:10px;
+border-bottom:1px solid var(--line);background:var(--panel)}
+header h1{font-size:18px;margin:0;flex:1}
+.pill{font-size:12px;color:var(--dim);border:1px solid var(--line);border-radius:99px;padding:2px 10px}
+main{flex:1;min-height:0;position:relative}
+section{position:absolute;inset:0;overflow-y:auto;padding:14px 16px 20px;display:none}
+section.on{display:block}
+section#chat.on{display:flex;flex-direction:column;padding:0}
+nav{display:flex;border-top:1px solid var(--line);background:var(--panel);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;background:none;border:0;color:var(--dim);padding:9px 0 8px;font-size:12px;display:flex;
+flex-direction:column;align-items:center;gap:2px;min-height:52px}
+nav button span{font-size:20px;line-height:1}
+nav button.on{color:var(--accent)}
+#log{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.msg{max-width:88%;padding:9px 13px;border-radius:16px;white-space:pre-wrap;word-wrap:break-word}
+.me{align-self:flex-end;background:var(--accent);color:var(--accent-text);border-bottom-right-radius:4px}
+.ai{align-self:flex-start;background:var(--panel2);border-bottom-left-radius:4px}
+.meta{font-size:12px;color:var(--dim);margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.meta button{background:var(--panel);border:1px solid var(--line);color:var(--text);border-radius:99px;
+padding:4px 10px;font-size:13px;min-height:30px}
+.trace{font-size:13px;color:var(--dim);margin-top:6px;border-top:1px solid var(--line);padding-top:6px}
+.sys{align-self:center;color:var(--dim);font-size:13px;text-align:center;max-width:92%}
+form.compose{display:flex;gap:8px;padding:10px 12px calc(10px);border-top:1px solid var(--line);background:var(--panel)}
+input,textarea,select{width:100%;background:var(--panel2);color:var(--text);border:1px solid var(--line);
+border-radius:12px;padding:11px 13px;font:inherit;outline:none}
+input:focus,textarea:focus{border-color:var(--accent)}
+textarea{resize:vertical;min-height:90px}
+button.primary,button.secondary{border-radius:12px;padding:11px 16px;font:inherit;font-weight:600;min-height:44px;border:0}
+button.primary{background:var(--accent);color:var(--accent-text)}
+button.secondary{background:var(--panel2);color:var(--text);border:1px solid var(--line)}
+button:disabled{opacity:.5}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:14px}
+.card h2{font-size:15px;margin:0 0 4px}
+.card p{color:var(--dim);font-size:14px;margin:0 0 10px}
+.row{display:flex;gap:8px;margin-top:8px}
+.row>*{flex:1}
+.bar{height:8px;background:var(--panel2);border-radius:99px;overflow:hidden;margin:8px 0 4px}
+.bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .3s}
+.note{font-size:13px;color:var(--dim)}
+.ok{color:var(--good)}.err{color:var(--bad)}
+dl{margin:0;display:grid;grid-template-columns:1fr auto;gap:6px 12px;font-size:14px}
+dt{color:var(--dim)}dd{margin:0;text-align:right;word-break:break-word}
+ul.list{list-style:none;padding:0;margin:8px 0 0;font-size:14px}
+ul.list li{padding:8px 0;border-top:1px solid var(--line)}
+ul.list small{color:var(--dim);display:block}
+pre{white-space:pre-wrap;font-size:12px;background:var(--panel2);padding:10px;border-radius:12px;overflow-x:auto}
+label.sw{display:flex;justify-content:space-between;align-items:center;padding:8px 0}
+.q-ok{color:var(--good)}.q-miss{color:var(--bad)}
+.file{display:block;border:2px dashed var(--line);border-radius:14px;padding:16px;text-align:center;color:var(--dim)}
+</style>
+</head>
+<body>
+<header><h1>Aimodel</h1><span class="pill" id="pill">connecting…</span></header>
+<main>
+  <section id="chat" class="on">
+    <div id="log"><div class="sys">Say hello, ask a question, or tell me a fact like “My sister lives in Delhi”.<br>Feed me datasets in the <b>Train</b> tab.</div></div>
+    <form class="compose" id="compose">
+      <input id="msg" placeholder="Message Aimodel" autocomplete="off" enterkeyhint="send">
+      <button class="primary" id="send" style="flex:none">Send</button>
+    </form>
+  </section>
+
+  <section id="train">
+    <div class="card">
+      <h2>Add a dataset</h2>
+      <p>Text, CSV, JSON or JSONL. Files with question/answer columns (question, answer, prompt, response, instruction, output…) become taught replies; anything else is read as knowledge.</p>
+      <label class="file"><input type="file" id="file" accept=".txt,.md,.csv,.tsv,.json,.jsonl,.ndjson,text/*" multiple hidden>Tap to choose files</label>
+      <textarea id="paste" placeholder="…or paste text here" style="margin-top:10px"></textarea>
+      <div class="row"><button class="primary" id="addPaste">Learn pasted text</button></div>
+      <div class="row"><input id="url" type="url" placeholder="…or a web page link (https://)"><button class="secondary" id="addUrl" style="flex:none">Read</button></div>
+    </div>
+
+    <div class="card" id="jobCard" hidden>
+      <h2 id="jobTitle">Working…</h2>
+      <div class="bar"><i id="jobBar"></i></div>
+      <div class="note" id="jobMsg"></div>
+    </div>
+
+    <div class="card">
+      <h2>Train</h2>
+      <p>Give the neural network extra practice on everything it knows. More rounds help after adding a lot of data.</p>
+      <div class="row"><select id="epochs"><option>3</option><option selected>5</option><option>10</option><option>20</option></select>
+      <button class="primary" id="trainBtn">Start training</button></div>
+      <div class="row"><button class="secondary" id="studyBtn">Study session</button><button class="secondary" id="evalBtn">Check how good it is</button></div>
+      <div class="note" id="trainOut" style="margin-top:8px"></div>
+    </div>
+
+    <div class="card">
+      <h2>Quiz</h2>
+      <p>The model tests itself on what it learned.</p>
+      <button class="secondary" id="quizBtn" style="width:100%">Run a quiz</button>
+      <ul class="list" id="quizOut"></ul>
+    </div>
+  </section>
+
+  <section id="teach">
+    <div class="card">
+      <h2>Teach a reply</h2>
+      <p>Show it exactly what to say to a question.</p>
+      <input id="tq" placeholder="When I say…">
+      <input id="ta" placeholder="…you say" style="margin-top:8px">
+      <div class="row"><button class="primary" id="teachBtn">Teach</button></div>
+      <div class="note" id="teachOut" style="margin-top:8px"></div>
+    </div>
+    <div class="card">
+      <h2>What it knows</h2>
+      <div class="row"><input id="topic" placeholder="Search facts (e.g. cat)"><button class="secondary" id="factBtn" style="flex:none">Facts</button><button class="secondary" id="memBtn" style="flex:none">Taught</button></div>
+      <ul class="list" id="knowOut"></ul>
+    </div>
+  </section>
+
+  <section id="brain">
+    <div class="card"><h2>Brain</h2><dl id="stats"></dl></div>
+    <div class="card">
+      <h2>Settings</h2>
+      <label class="sw">Look things up on the web<input type="checkbox" id="online" style="width:auto"></label>
+      <label class="sw">Use the trained writer<input type="checkbox" id="writer" style="width:auto"></label>
+      <div class="row"><input id="forgetText" placeholder="Forget replies about…"><button class="secondary" id="forgetBtn" style="flex:none">Forget</button></div>
+      <div class="note" id="forgetOut"></div>
+    </div>
+    <pre id="report" hidden></pre>
+  </section>
+</main>
+<nav id="tabs">
+  <button data-t="chat" class="on"><span>💬</span>Chat</button>
+  <button data-t="train"><span>📚</span>Train</button>
+  <button data-t="teach"><span>🎓</span>Teach</button>
+  <button data-t="brain"><span>🧠</span>Brain</button>
+</nav>
+<script>
+const $ = (id) => document.getElementById(id);
+let TOKEN = "";
+try {
+  const u = new URL(location.href);
+  if (u.searchParams.get("token")) {
+    localStorage.setItem("aimodel_token", u.searchParams.get("token"));
+    u.searchParams.delete("token"); history.replaceState(null, "", u.pathname);
+  }
+  TOKEN = localStorage.getItem("aimodel_token") || "";
+} catch (e) {}
+
+async function api(path, body) {
+  const opts = {headers: {}};
+  if (TOKEN) opts.headers.Authorization = "Bearer " + TOKEN;
+  if (body !== undefined) { opts.method = "POST"; opts.headers["Content-Type"] = "application/json"; opts.body = JSON.stringify(body); }
+  let r;
+  try { r = await fetch(path, opts); } catch (e) { throw new Error("Can't reach the server. Is it still running?"); }
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok && !(r.status === 409)) throw new Error(data.error || ("Error " + r.status));
+  data._status = r.status;
+  return data;
+}
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+// ---- tabs
+document.querySelectorAll("#tabs button").forEach((b) => b.onclick = () => {
+  document.querySelectorAll("#tabs button, main section").forEach((e) => e.classList.remove("on"));
+  b.classList.add("on"); $(b.dataset.t).classList.add("on");
+  if (b.dataset.t === "brain") refresh();
+});
+
+// ---- chat
+const log = $("log");
+function add(cls, html) {
+  const d = document.createElement("div"); d.className = "msg " + cls; d.innerHTML = html;
+  log.appendChild(d); log.scrollTop = log.scrollHeight; return d;
+}
+function say(text) { const d = document.createElement("div"); d.className = "sys"; d.textContent = text; log.appendChild(d); log.scrollTop = log.scrollHeight; }
+$("compose").onsubmit = async (e) => {
+  e.preventDefault();
+  const text = $("msg").value.trim(); if (!text) return;
+  $("msg").value = ""; add("me", esc(text));
+  const wait = add("ai", "…"); $("send").disabled = true;
+  try {
+    const r = await api("/api/chat", {text});
+    if (r.reply == null) {
+      wait.innerHTML = "I don't know how to reply to that yet.<div class='meta'><button id='tn'>Teach me</button></div>";
+      wait.querySelector("#tn").onclick = () => { $("tq").value = text; $("ta").value = ""; document.querySelector('[data-t=teach]').click(); $("ta").focus(); };
+    } else {
+      let html = esc(r.reply);
+      if (r.source !== "smalltalk" && r.source !== "noted") html += `<div class="meta">confidence ${r.confidence}</div>`;
+      else html += `<div class="meta"></div>`;
+      wait.innerHTML = html;
+      const meta = wait.querySelector(".meta");
+      const mk = (label, fn) => { const b = document.createElement("button"); b.textContent = label; b.onclick = fn; meta.appendChild(b); return b; };
+      mk("👍", async () => { say((await api("/api/rate", {good: true})).message); });
+      mk("👎", async () => {
+        const better = prompt("What should I have said? (leave empty to just mark it wrong)") || "";
+        say((await api("/api/rate", {good: false, better})).message);
+      });
+      if (r.trace && r.trace.length) mk("Why?", () => {
+        let t = wait.querySelector(".trace");
+        if (t) return t.remove();
+        t = document.createElement("div"); t.className = "trace";
+        t.innerHTML = r.trace.map((s, i) => `${i + 1}. [${esc(s.kind)}] ${esc(s.text)}<br><small>${esc(s.source)}</small>`).join("<br>");
+        wait.appendChild(t);
+      });
+    }
+  } catch (err) { wait.innerHTML = "<span class='err'>" + esc(err.message) + "</span>"; }
+  $("send").disabled = false; log.scrollTop = log.scrollHeight;
+};
+
+// ---- jobs (dataset import, training, study, evaluation)
+let polling = null;
+const TITLES = {dataset: "Learning from your data", train: "Training", study: "Study session", evaluate: "Checking how good it is"};
+function showJob(j) {
+  $("jobCard").hidden = !(j.running || j.result || j.error);
+  $("jobTitle").textContent = TITLES[j.kind] || "Working…";
+  $("jobBar").style.width = (j.total ? Math.round(100 * j.done / j.total) : (j.running ? 5 : 100)) + "%";
+  $("jobMsg").className = "note" + (j.error ? " err" : "");
+  $("jobMsg").textContent = j.error || (j.running ? j.message : describe(j));
+  for (const id of ["trainBtn", "studyBtn", "evalBtn", "addPaste", "addUrl"]) $(id).disabled = j.running;
+}
+function describe(j) {
+  const r = j.result; if (!r) return "";
+  if (j.kind === "dataset") {
+    const parts = [];
+    if (r.answers) parts.push(`${r.answers} taught answers`);
+    if (r.sentences) parts.push(`${r.sentences} sentences studied`);
+    if (r.cut) parts.push(`${r.cut} rows skipped (limit)`);
+    return `Done (${r.format}): ` + (parts.join(", ") || "nothing new to learn");
+  }
+  if (j.kind === "train") return `Trained ${r.epochs} rounds` + (r.loss != null ? `, loss ${r.loss} (lower is better).` : ".");
+  if (j.kind === "study") return `Study done. Self-exam ${r.exam.score}/${r.exam.total}.`;
+  if (j.kind === "evaluate") { $("report").hidden = false; $("report").textContent = r.report; return "Done. The scorecard is on the Brain tab."; }
+  return "Done";
+}
+function watch() {
+  if (polling) return;
+  polling = setInterval(async () => {
+    try {
+      const j = await api("/api/job"); showJob(j);
+      if (!j.running) { clearInterval(polling); polling = null; refresh(); }
+    } catch (e) { clearInterval(polling); polling = null; }
+  }, 700);
+}
+async function start(path, body) {
+  try {
+    const r = await api(path, body);
+    if (r.started === false) { alert("Another task is still running."); return; }
+    showJob({running: true, kind: path === "/api/dataset" ? "dataset" : path.slice(5), done: 0, total: 0, message: "Starting…"});
+    watch();
+  } catch (e) { alert(e.message); }
+}
+$("file").onchange = async (e) => {
+  for (const f of e.target.files) {
+    const text = await f.text();
+    await start("/api/dataset", {name: f.name, text});
+    while (polling) await new Promise((r) => setTimeout(r, 500));
+  }
+  e.target.value = "";
+};
+$("addPaste").onclick = () => { const t = $("paste").value.trim(); if (t) { start("/api/dataset", {name: "pasted text", text: t}); $("paste").value = ""; } };
+$("addUrl").onclick = () => { const u = $("url").value.trim(); if (u) { start("/api/dataset", {url: u}); $("url").value = ""; } };
+$("trainBtn").onclick = () => start("/api/train", {epochs: +$("epochs").value});
+$("studyBtn").onclick = () => start("/api/study", {});
+$("evalBtn").onclick = () => start("/api/evaluate", {quick: true});
+$("quizBtn").onclick = async () => {
+  $("quizBtn").disabled = true; $("quizOut").innerHTML = "<li>Thinking…</li>";
+  try {
+    const r = await api("/api/quiz", {n: 5});
+    $("quizOut").innerHTML = r.total ? `<li><b>${r.score}/${r.total} correct</b></li>` + r.results.map((x) =>
+      `<li class="${x.correct ? "q-ok" : "q-miss"}">${x.correct ? "✓" : "✗"} ${esc(x.q)}<small>I said: ${esc(x.reply || "(nothing)")}${x.correct ? "" : " · should be: " + esc(x.answer)}</small></li>`).join("")
+      : "<li>Nothing to quiz on yet. Add a dataset first.</li>";
+  } catch (e) { $("quizOut").innerHTML = "<li class='err'>" + esc(e.message) + "</li>"; }
+  $("quizBtn").disabled = false;
+};
+
+// ---- teach / knowledge
+$("teachBtn").onclick = async () => {
+  try {
+    const r = await api("/api/teach", {prompt: $("tq").value, response: $("ta").value});
+    $("teachOut").className = "note ok"; $("teachOut").textContent = r.message; $("tq").value = $("ta").value = ""; refresh();
+  } catch (e) { $("teachOut").className = "note err"; $("teachOut").textContent = e.message; }
+};
+async function know(kind) {
+  const r = await api(kind === "facts" ? "/api/facts?topic=" + encodeURIComponent($("topic").value) : "/api/memories");
+  const items = kind === "facts" ? r.facts.map((f) => `<li>${esc(f)}</li>`) :
+    r.memories.map((m) => `<li>${esc(m.prompt)}<small>→ ${esc(m.response)}</small></li>`);
+  $("knowOut").innerHTML = items.join("") || "<li>Nothing yet.</li>";
+}
+$("factBtn").onclick = () => know("facts").catch((e) => alert(e.message));
+$("memBtn").onclick = () => know("mem").catch((e) => alert(e.message));
+
+// ---- brain
+async function refresh() {
+  try {
+    const s = await api("/api/state");
+    $("pill").textContent = s.name ? "hi, " + s.name : "online"; $("pill").className = "pill";
+    $("stats").innerHTML = Object.entries(s.stats).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
+    $("online").checked = s.online; $("writer").checked = s.writer;
+    if (s.job.running) { showJob(s.job); watch(); }
+  } catch (e) { $("pill").textContent = e.message.startsWith("Not auth") ? "locked" : "offline"; }
+}
+$("online").onchange = (e) => api("/api/online", {on: e.target.checked});
+$("writer").onchange = (e) => api("/api/writer", {on: e.target.checked});
+$("forgetBtn").onclick = async () => {
+  const r = await api("/api/forget", {text: $("forgetText").value}).catch((e) => ({error: e.message}));
+  $("forgetOut").textContent = r.error || `Forgot ${r.forgot} taught repl${r.forgot === 1 ? "y" : "ies"}.`; refresh();
+};
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
+refresh();
+</script>
+</body>
+</html>

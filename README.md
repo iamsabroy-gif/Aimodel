@@ -83,6 +83,34 @@ Run `termux-setup-storage` once to read your files, e.g.
 `/read /sdcard/Download/notes.txt`. Use `pkg install python-numpy`, not
 `pip install numpy` (pip tries to build numpy on the phone).
 
+## The mobile app
+
+A phone-friendly app (installable to your home screen) where you add datasets, train, and chat. It is a
+small web app served by the model itself, so there is nothing extra to install (numpy only).
+
+```bash
+python3 -m aimodel.server                  # this device only: open http://127.0.0.1:8765
+python3 -m aimodel.server --host 0.0.0.0   # your phone on the same Wi-Fi can connect too
+```
+
+- **On the phone itself (Android):** run it in Termux (see *Run it on Android*), then open
+  `http://127.0.0.1:8765` in Chrome and choose **Add to Home screen**.
+- **From a computer to your phone:** use `--host 0.0.0.0`. It prints a link with a private access token,
+  such as `http://192.168.1.20:8765/?token=...`. Open it on the phone (same Wi-Fi). Anyone with that link
+  can use and teach your model, so keep it to a network you trust. (Add to Home screen needs HTTPS or
+  `localhost` to install as an app; over plain Wi-Fi it still works as a normal web page.)
+- **Chat** tab: talk to it; 👍/👎 teach it what you like (👎 lets you type a better answer); *Why?* shows its reasoning.
+- **Train** tab: pick dataset files (`.txt`, `.md`, `.csv`, `.tsv`, `.json`, `.jsonl`), paste text, or give a web link.
+  Files with question/answer columns (`question`/`answer`, `prompt`/`response`, `instruction`/`output`...) become
+  taught replies (up to 5,000 rows per file); other text is read as knowledge. Then run *Start training*,
+  a *Study session*, a *Quiz*, or the standard scorecard.
+- **Teach** tab: teach one reply directly; browse the facts and replies it has learned.
+- **Brain** tab: statistics, web lookups on/off, forget replies, the scorecard.
+
+It saves to `brain.json` (use `--brain` for another file), the same brain the terminal chat uses.
+The neural network's training happens on the device running the server, so the 3-million-parameter
+transformer writer is still trained on Kaggle (it is used if `writer.npz` is next to the brain).
+
 ## Run it on Kaggle
 
 **Easiest:** import `notebooks/aimodel_on_kaggle.ipynb` (Kaggle: **Create → New Notebook →
