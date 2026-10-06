@@ -37,7 +37,8 @@ def keywords(text: str) -> list[str]:
 
 def looks_like_question(text: str) -> bool:
     text = text.strip().lower()
-    return text.endswith("?") or text.startswith(_QUESTION_WORDS)
+    return (text.endswith("?") or text.startswith(_QUESTION_WORDS)
+            or text.startswith(("name all", "name the", "list all", "list the", "list some")))
 
 
 _DANGLING = {"the", "a", "an", "of", "in", "to", "and", "or", "by", "with", "for", "from", "as", "at", "on"}

@@ -49,6 +49,7 @@ from .reasoning import stem
 from .smalltalk import SmallTalkMixin
 from .study import GENERIC as _GENERIC, WEAK_WORDS, StudyMixin, bare as _bare
 from .text import TfidfIndex, keywords, looks_like_question, split_sentences, tokenize
+from .understand import members, members_question, understand
 from .vectors import PretrainedVectors
 from .writer import WriterMixin
 
@@ -103,6 +104,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         self._vectors_changed = False
         self._expand_cache: dict = {}
         self._names_cache = (-1, set())
+        self._vocab_cache = (None, set())
         self.last_match: int | None = None
         self.last_query: str | None = None
         self.last_reply: str | None = None
@@ -566,9 +568,15 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
 
         Returns (answer, confidence, steps) or None.
         """
+        text = self.understand_question(text)
         kind = rsn.question_kind(text)
+        asked = members_question(text)
+        if asked:
+            found = members(self.facts, *asked)
+            if found:
+                return self._list_members(found, asked[1])
         if kind == "yesno":
-            proof = self._prove(text)
+            proof = self._prove_either(text) or self._prove(text)
             if proof:
                 return proof
         if kind == "why":
@@ -634,6 +642,52 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
                 if step.get("sentence") in features:
                     step["features"] = features[step["sentence"]]
         return " ".join(parts), confidence, steps
+
+    def _prove_either(self, text: str):
+        """"Is the mimbat a bird or a mammal?": say which one I can prove."""
+        words = tokenize(text)
+        if "or" not in words[2:-1] or words[0] not in rsn.BE:
+            return None
+        cut = words.index("or", 2)
+        left, right = words[1:cut], words[cut + 1:]
+        for k in range(1, len(left)):
+            subj, first = " ".join(left[:k]), " ".join(left[k:])
+            proofs = [(opt, self._prove(f"{words[0]} {subj} {opt}")) for opt in (first, " ".join(right))]
+            yes = [(opt, p) for opt, p in proofs if p and p[0].startswith(("Yes", "Probably yes"))]
+            if yes:
+                reply = " ".join(p[0] for _, p in yes)
+                return reply, min(p[1] for _, p in yes), [step for _, p in yes for step in p[2]]
+        return None
+
+    def _vocabulary(self) -> set[str]:
+        """Every word I have read, for spotting typos (rebuilt only when I learn something)."""
+        key = (len(self.knowledge), len(self.facts), len(self.memories), len(self.shelf))
+        if self._vocab_cache[0] != key:
+            words = set()
+            for entry in self.knowledge + self.shelf:
+                words.update(tokenize(entry["text"]))
+            for m in self.memories:
+                words.update(tokenize(m["prompt"]))
+            self._vocab_cache = (key, words | {stem(w) for w in words})
+        return self._vocab_cache[1]
+
+    def understand_question(self, text: str) -> str:
+        return understand(text, self._vocabulary())
+
+    def _list_members(self, found: list[dict], cls: str):
+        names = [_bare(f["subj"]) for f in found[:8]]
+        if len(names) == 1:
+            joined, verb = f"the {names[0]}", "is"
+        else:
+            joined, verb = "the " + ", the ".join(names[:-1]) + " and the " + names[-1], "are"
+        plural = cls if cls.endswith("s") else cls + ("es" if cls.endswith(("sh", "ch", "x")) else "s")
+        what = f"a {cls}" if verb == "is" else plural
+        reply = (joined[0].upper() + joined[1:]) + f" {verb} {what}."
+        steps = [{"kind": "fact", "text": rsn.state(f), "source": f["source"], "sentence": f["text"]}
+                 for f in found[:8]]
+        steps.append({"kind": "inference", "source": "my reasoning",
+                      "text": f"Collected everything I know that is a {cls}"})
+        return reply, 0.85, steps
 
     @staticmethod
     def _trimmed(fact: dict) -> bool:

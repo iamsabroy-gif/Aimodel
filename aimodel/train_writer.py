@@ -37,6 +37,7 @@ SIZES = {  # name: (layers, heads, dimensions, tokens of context)
     "tiny": (2, 2, 64, 128),     # for a quick test on a CPU
     "small": (4, 4, 128, 256),
     "base": (6, 6, 192, 384),    # about 3M parameters: the Kaggle default
+    "large": (8, 8, 256, 384),   # about 7M parameters: needs a GPU; slower on a phone
 }
 
 

@@ -362,8 +362,11 @@ not regressions.
 **Baseline** (2026-10-01, the starter brain with the Kaggle-trained writer): index 99.5; answers correct
 100%; "I don't know" 100%; wrong 3%; invented words 0%; harder questions 50%; corrupted drafts caught
 100%; good drafts wrongly rejected 0%; greetings 100% / 0% false; own-question recall 97%; writer passes
-90% (82% with new names). The harder questions it misses today: synonyms ("dwell"), typos ("Whre"), and
-"which animals are birds?".
+90% (82% with new names). Since then it fixes typos ("Whre") and synonyms ("dwell"), lists members ("Which animals are birds?",
+"Name all the birds.") and answers either/or questions ("Is it a bird or a mammal?"); the harder set grew
+from 6 to 10 questions and it passes 8 (80%). Still missed today: "Does the lorpan eat meat?" (it can't say
+no from not knowing) and "What do mammals and birds have in common?". `train_writer --size large`
+(about 7M parameters) is available for a bigger writer, but it only rewords answers; it does not add reasoning.
 
 ## Commands
 

@@ -97,6 +97,10 @@ ITEMS = [
     ("stretch", "Whre does the lorpan live?", ["mountains"], {}),
     ("stretch", "Which animals are birds?", ["quillet", "druxle"], {"no": ["mimbat"]}),
     ("stretch", "Is the quillet an animal and does it live in marshes?", ["yes", "marshes"], {}),
+    ("stretch", "Name all the birds.", ["quillet", "druxle"], {"no": ["mimbat"]}),
+    ("stretch", "Is the mimbat a bird or a mammal?", ["mammal"], {"no": ["quillet"]}),
+    ("stretch", "Does the lorpan eat meat?", None, {"verdict": "no"}),
+    ("stretch", "What do mammals and birds have in common?", ["animals"], {}),
     # things it was never told: the right answer is "I don't know"
     ("abstain", "What does the glorb eat?", None, {}),
     ("abstain", "Is a glorb an animal?", None, {}),
