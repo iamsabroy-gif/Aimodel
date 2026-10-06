@@ -144,6 +144,24 @@ def _amount_pattern(text: str):
     return _MEASURED
 
 
+# The first set gives the old hand-made score: it still decides how sure an answer is. The learned weights
+# (aimodel/ranking.py, saved in aimodel/data/rank_weights.json) decide the order of the sentences.
+DEFAULT_RANK_WEIGHTS = {"base": 1.0, "pos0": 0.1, "definition": 0.1, "about": 0.1, "intro": -0.3,
+                        "where": 0.15, "how": 0.15, "bonus": 1.0}
+RANK_WEIGHTS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "rank_weights.json")
+
+
+def _learned_weights() -> dict[str, float] | None:
+    try:
+        with open(RANK_WEIGHTS_PATH, encoding="utf-8") as f:
+            return {k: float(v) for k, v in json.load(f).items()}
+    except (OSError, ValueError):
+        return None
+
+
+RANK_SCALE = 4.0  # a learned score's units are about this many times the hand-made score's
+
+
 class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
     # When the network knows this many words, it is rebuilt with bigger vectors.
     GROWTH = ((8000, 96), (30000, 160))
@@ -175,6 +193,11 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         self._expand_cache: dict = {}
         self._names_cache = (-1, set())
         self._vocab_cache = (None, set())
+        self._candidate_log = None
+        # how much each ranking feature counts (the first six reproduce the hand-set scoring)
+        self.rank_weights = dict(DEFAULT_RANK_WEIGHTS)
+        self.evidence_first = False
+        self.learned_weights = _learned_weights()  # None: fall back to the hand-made order
         # how pretrained word vectors are used: to widen question words, and/or to compare whole sentences
         # (widening question words with similar words let wrong sentences in; comparing whole sentences did not)
         self.vector_settings = {"expand": True, "sentence": True, "k": 3, "min": 0.85}
@@ -604,6 +627,9 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         content = {w for w in wanted if w not in WEAK_WORDS}
         where = bool(re.match(r"^\W*where\b", text, re.I))
         how = bool(re.match(r"^\W*how\s+(do|does|did|can|could|is|are|to)\b", text, re.I))
+        key = self._key_word(wanted)
+        words = [stem(t) for t in tokenize(text) if t not in STOPWORDS]
+        pairs = [words[n:n + 2] for n in range(len(words) - 1)]  # neighbouring words of the question
         cands = []
         for i in (int(i) for i in np.argsort(-base)[:60]):
             covered = {w for w, alts in wanted.items() if alts & stems[i]}
@@ -619,22 +645,40 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             feats = [tfidf[i], meaning[i], len(covered) / len(wanted),
                      float(k.get("pos", 99) < 2), float(bool(definition.search(rsn.clean(k["text"])))),
                      min(1.0, len(toks[i]) / 40), float(not web_source), float(web_source)]
-            score = (base[i] + 0.1 * feats[3] + 0.1 * feats[4] + (bonus(i, feats[2]) if bonus else 0.0)
-                     + 0.1 * bool(about.search(rsn.clean(k["text"]))) - 0.3 * bool(_INTRO.search(k["text"]))
-                     + 0.15 * (where and bool(_WHERE_HINT.search(k["text"])))
-                     + 0.15 * (how and bool(_MANNER.search(k["text"]))))
-            cands.append({"i": i, "score": float(score), "covered": covered, "context": context,
-                          "features": feats})
+            sentence_stems = [stem(t) for t in toks[i]]
+            named = {
+                "base": float(base[i]), "tfidf": float(tfidf[i]), "meaning": float(meaning[i]),
+                "coverage": len(covered) / len(wanted),
+                "content": len((covered | context) & content) / len(content) if content else 1.0,
+                "key": float(key in (covered | context)),
+                "pos0": feats[3], "definition": feats[4],
+                "about": float(bool(about.search(rsn.clean(k["text"])))),
+                "intro": float(bool(_INTRO.search(k["text"]))),
+                "where": float(where and bool(_WHERE_HINT.search(k["text"]))),
+                "how": float(how and bool(_MANNER.search(k["text"]))),
+                "length": feats[5], "web": feats[7],
+                "bigram": float(any(sentence_stems[n:n + 2] == pair for pair in pairs
+                                    for n in range(len(sentence_stems) - 1))),
+                "bonus": float(bonus(i, feats[2])) if bonus else 0.0,
+            }
+            score = sum(self.rank_weights.get(name, 0.0) * value for name, value in named.items())
+            order = (sum(self.learned_weights.get(name, 0.0) * value for name, value in named.items())
+                     if self.learned_weights else score * RANK_SCALE)
+            cands.append({"i": i, "score": float(score), "order": float(order), "covered": covered,
+                          "context": context, "features": feats, "named": named})
         if not cands:
             return None
         for c, adj in zip(cands, self.ranker.adjust([c["features"] for c in cands])):
             c["score"] += float(adj)
+            c["order"] += float(adj) * RANK_SCALE
+        if self._candidate_log is not None:  # for measuring the ranking (see aimodel/ranking_test.py)
+            self._candidate_log.append({"question": text, "candidates": list(cands)})
 
-        cands.sort(key=lambda c: -c["score"])
-        top = cands[0]["score"]
+        cands.sort(key=lambda c: -c["order"])
+        top = max(c["score"] for c in cands)  # how sure I am still comes from the hand-made score
         chosen, covered = [], set()
         while cands and len(chosen) < max_sentences:
-            c = max(cands, key=lambda c: c["score"] + 0.15 * len(c["covered"] - covered))
+            c = max(cands, key=lambda c: c["order"] + 0.15 * RANK_SCALE * len(c["covered"] - covered))
             cands.remove(c)
             new_terms = (c["covered"] - covered) & (content or c["covered"])
             if chosen and (not new_terms or c["score"] < 0.5 * top):
@@ -781,6 +825,9 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             matched = set().union(*(set(t["matched"]) for t in evidence[2]))
             if coverage < len(matched) / max(1, len(self._wanted(text))):
                 facts, coverage = [], 0.0  # the evidence answers more of the question
+            elif (self.evidence_first and facts and evidence[2]
+                  and evidence[2][0]["text"] not in {f["text"] for f in facts}):
+                facts, coverage = [], 0.0  # the best-ranked sentence is not one of the facts: lead with it
         if not facts and evidence is None:
             return None
         parts, steps, used = [], [], set()

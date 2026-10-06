@@ -344,6 +344,29 @@ answered with "made up of hexagonal cells" or with "beeswax"), vocabulary ("husb
 "orbital period" for "year"), and questions whose answer is spread over two sentences. Each set's misses get read
 once it has been scored, so use new articles for the next honest test.
 
+## How it ranks sentences
+
+When a question comes in, the model finds up to 60 candidate sentences and scores each on fifteen features: how well
+the words and meanings match, how much of the question it covers (and of the part that matters), whether it is the
+text's opening or a definition, whether it states a location or a manner when asked "where" or "how", and so on.
+The first scoring was set by hand. It is now learned: `python -m aimodel.ranking sample_data/devset ...` fits the
+weights so that the sentence holding the answer ranks first, and saves them to `aimodel/data/rank_weights.json`.
+The hand-made score is still what decides how sure the model is, so what it answers and what it declines are
+unchanged. Your 👍/👎 still adjusts the ranking on top of this.
+
+Measured on the question sets (weights learned from `devset` to `devset4`; `devset5` was held out):
+
+| | hand-made order | learned order |
+|---|---|---|
+| devset5: the answer sentence ranks first | 16 of 39 (mean reciprocal rank 0.59) | 25 of 39 (0.74) |
+| devset5: the reply's first sentence holds the answer | 24 of 40 | 26 of 40 |
+| devset5: answerable questions right / declined | 34 of 45 / 9 of 10 | 35 of 45 / 9 of 10 |
+| first sentence holds the answer, summed over all five sets | 133 of 194 | 145 of 194 |
+
+Putting the best-ranked sentence ahead of the facts was tried and made answers worse (148 to 144 right), so facts
+still come first. The honest limit: the learned order was fitted on 153 questions, so rare features (like "how")
+could be over-weighted, which is why weights are capped.
+
 ## Word vectors
 
 Word vectors are lists of numbers, one per word, learned by others from billions of words, so that words with

@@ -1,0 +1,17 @@
+{
+ "base": 3.0,
+ "tfidf": -0.8076,
+ "meaning": 3.0,
+ "coverage": 1.0928,
+ "content": 3.0,
+ "key": 0.6239,
+ "pos0": 0.4616,
+ "definition": 0.592,
+ "about": 0.2567,
+ "intro": 0.0,
+ "where": 1.9283,
+ "how": 3.0,
+ "length": 0.2352,
+ "web": 0.0,
+ "bigram": -0.0816
+}
