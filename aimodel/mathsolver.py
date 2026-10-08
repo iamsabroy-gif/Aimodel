@@ -73,6 +73,7 @@ def _normalise(text: str) -> str:
     t = re.sub(r"\bcube root(?: of)?\s*", "cbrt ", t)
     t = re.sub(r"\bfactorial of\s*(\d+)|\b(\d+)\s*!", lambda m: f"fact({m.group(1) or m.group(2)})", t)
     t = re.sub(r"\b(sqrt|cbrt|ln|log|abs)\s+(\d+(?:\.\d+)?)", r"\1(\2)", t)
+    t = re.sub(r"\badd\s+(\d+(?:\.\d+)?)\s+(?:and|to)\s+(\d+(?:\.\d+)?)", r"\1+\2", t)
     t = re.sub(r"\b(?:sum|total) of\s*([\d.\s+and]+)", lambda m: "+".join(re.findall(r"\d+(?:\.\d+)?", m.group(1))), t)
     t = re.sub(r"\bproduct of\s*([\d.\s+and]+)", lambda m: "*".join(re.findall(r"\d+(?:\.\d+)?", m.group(1))), t)
     t = re.sub(r"\b(?:average|mean) of\s*([\d.\s,+and]+)",

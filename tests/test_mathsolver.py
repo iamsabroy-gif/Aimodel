@@ -31,6 +31,14 @@ class TestMathSolver(unittest.TestCase):
         self.assertEqual(confidence, 1.0)
         self.assertTrue(m.last_trace)
 
+    def test_a_taught_memory_never_overrides_the_calculator(self):
+        m = LearningModel(seed=0)
+        m.learn("3+3", "6")
+        for text, answer in [("5 + 7", "12"), ("what is 25 + 17?", "42"), ("add 5 and 7", "12"),
+                             ("what is the sum of 12 and 30", "42"), ("how much is 9 + 8", "17")]:
+            self.assertIn(answer, m.respond(text)[0], text)
+            self.assertEqual(m.last_source, "calculation", text)
+
 
 if __name__ == "__main__":
     unittest.main()
