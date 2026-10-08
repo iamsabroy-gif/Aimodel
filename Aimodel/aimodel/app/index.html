@@ -218,7 +218,7 @@ $("compose").onsubmit = async (e) => {
       wait.querySelector("#tn").onclick = () => { $("tq").value = text; $("ta").value = ""; document.querySelector('[data-t=teach]').click(); $("ta").focus(); };
     } else {
       let html = esc(r.reply);
-      if (r.source !== "smalltalk" && r.source !== "noted") html += `<div class="meta">confidence ${r.confidence}</div>`;
+      if (r.source !== "smalltalk" && r.source !== "noted" && r.source !== "calculation") html += `<div class="meta">confidence ${r.confidence}</div>`;
       else html += `<div class="meta"></div>`;
       wait.innerHTML = html;
       const meta = wait.querySelector(".meta");

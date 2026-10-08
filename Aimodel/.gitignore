@@ -1,0 +1,11 @@
+brain.json
+brain*.json
+*.npz
+*.tmp
+__pycache__/
+# exported training data holds your private notes
+writer_data/
+.venv/
+!aimodel/data/*.npz
+.aimodel_version
+aimodel_settings.json

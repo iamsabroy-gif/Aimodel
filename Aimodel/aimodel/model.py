@@ -46,6 +46,7 @@ from . import web
 from .neural import WordEmbeddings
 from .ranker import FeedbackRanker
 from .reasoning import stem
+from . import mathsolver
 from .smalltalk import SmallTalkMixin
 from .study import GENERIC as _GENERIC, WEAK_WORDS, StudyMixin, bare as _bare
 from .text import STOPWORDS, TfidfIndex, keywords, looks_like_question, split_sentences, tokenize
@@ -297,6 +298,13 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
                                 "matched": sorted(set(keywords(text)) & set(keywords(mem["prompt"])))}]
             if learn:
                 self.reinforce(mem, 0.1)
+        elif (calc := mathsolver.solve(text)) is not None:  # sums are calculated, never guessed
+            self.last_reply = calc["error"] if "error" in calc else (
+                f"{calc['expression']} = {calc['answer']}"
+                + (f"  (steps: {'; '.join(calc['steps'])})" if len(calc["steps"]) > 1 else ""))
+            self.last_source, best = "calculation", 1.0
+            self.last_trace = [{"kind": "calculation", "text": step, "source": "my calculator"}
+                               for step in calc["steps"]]
         elif talk is not None:
             self.last_reply, self.last_source, best = talk["reply"], "smalltalk", 1.0
             self._last_talk = talk["templates"]
