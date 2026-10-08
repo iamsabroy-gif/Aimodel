@@ -10,6 +10,7 @@ instead of copying the source text word for word.
 from __future__ import annotations
 
 import re
+from functools import lru_cache
 from collections import defaultdict, deque
 
 from .text import STOPWORDS, tokenize
@@ -116,6 +117,7 @@ def clean(sentence: str, keep_short: bool = False) -> str:
     return sentence
 
 
+@lru_cache(maxsize=100_000)
 def stem(word: str) -> str:
     """Very small stemmer so 'cats' matches 'cat'."""
     w = word.lower().strip("'’")

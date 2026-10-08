@@ -103,3 +103,22 @@ class TestInTheModel(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestAnswerKinds(unittest.TestCase):
+    def test_a_sentence_must_hold_the_kind_of_thing_asked_for(self):
+        from aimodel import verify
+        self.assertEqual(verify.kind("When was the park created?"), "time")
+        self.assertGreater(verify.fit("When was it built?", "It was built in 1889."), 0)
+        self.assertLess(verify.fit("When was it built?", "It is made of iron."), 0)
+        self.assertGreater(verify.fit("How many moons does it have?", "It has two moons."), 0)
+        self.assertLess(verify.fit("How many moons does it have?", "It is a rocky planet."), 0)
+        self.assertGreater(verify.fit("Why is it sweet?", "It is sweet because of fructose."), 0)
+        self.assertGreater(verify.fit("What colour is the fur?", "The fur is orange with black stripes."), 0)
+        self.assertEqual(verify.fit("What is a bicycle?", "A bicycle has two wheels."), 0)
+
+    def test_the_answer_carries_the_time_asked_for(self):
+        m = LearningModel(seed=0)
+        m.add_document("Albert Einstein (14 March 1879 - 18 April 1955) was a German-born physicist. "
+                       "He developed the theory of relativity.", "Albert_Einstein.txt")
+        self.assertIn("1879", m.respond("When was Einstein born?", learn=False)[0] or "")

@@ -48,6 +48,7 @@ from .ranker import FeedbackRanker
 from .reasoning import stem
 from . import mathsolver
 from .quantities import Quantities
+from . import verify
 from .relations import Relations
 from .smalltalk import SmallTalkMixin
 from .study import GENERIC as _GENERIC, WEAK_WORDS, StudyMixin, bare as _bare
@@ -169,6 +170,8 @@ def _learned_weights() -> dict[str, float] | None:
         return None
 
 
+FIT_WEIGHT = 0.25  # how much a sentence having the kind of content asked for (a time, a number...) counts
+FIT_SCORE = 0.0
 RANK_SCALE = 4.0  # a learned score's units are about this many times the hand-made score's
 
 
@@ -711,6 +714,12 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         for c, adj in zip(cands, self.ranker.adjust([c["features"] for c in cands])):
             c["score"] += float(adj)
             c["order"] += float(adj) * RANK_SCALE
+        asked = verify.kind(text)  # a "when" question needs a time, a "who" question a person...
+        if asked:
+            for c in cands:
+                c["fit"] = verify.fit(text, self.knowledge[c["i"]]["text"], asked)
+                c["order"] += FIT_WEIGHT * RANK_SCALE * c["fit"]
+                c["score"] += FIT_SCORE * c["fit"]
         if self._candidate_log is not None:  # for measuring the ranking (see aimodel/ranking_test.py)
             self._candidate_log.append({"question": text, "candidates": list(cands)})
 
@@ -734,10 +743,12 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         # Nepal" is not answered by a sentence that only mentions Nepal.
         together = any(content <= (c["covered"] | c["context"]) for c in chosen)  # one sentence says it all
         one_source = len({self.knowledge[c["i"]]["source"] for c in chosen}) == 1
-        if (coverage < 0.5 or self._key_word(wanted) not in (covered | about)
-                or confidence < self.knowledge_threshold
-                or (0 < len(content) <= 3 and not content <= (covered | about))
-                or (1 < len(content) <= 3 and not together and not one_source and not _SEVERAL.search(text))):
+        rejected = [name for name, bad in (
+            ("coverage", coverage < 0.5), ("key", self._key_word(wanted) not in (covered | about)),
+            ("confidence", confidence < self.knowledge_threshold),
+            ("content", 0 < len(content) <= 3 and not content <= (covered | about)),
+            ("together", 1 < len(content) <= 3 and not together and not one_source and not _SEVERAL.search(text))) if bad]
+        if rejected:
             return None
         trace = [{"kind": "evidence", "text": self.knowledge[c["i"]]["text"],
                   "source": self.knowledge[c["i"]]["source"], "pos": self.knowledge[c["i"]].get("pos", 0),
@@ -922,6 +933,14 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             steps += [t for t in trace if t["text"] not in used]
         if not parts:
             return None
+        asked = verify.kind(text)
+        if asked and evidence is not None and facts and verify.fit(text, " ".join(parts), asked) < 0:
+            # The facts I put together do not hold what was asked ("When...?" with no time in it), but a
+            # sentence I found does: say that sentence.
+            fitting = [t for t in evidence[2] if verify.fit(text, t["text"], asked) > 0]
+            if fitting:
+                parts, steps = [self._rephrase(fitting[0])], [fitting[0]]
+                confidence = max(confidence, evidence[1])
         if kind == "yesno":
             parts.insert(0, "I can't prove a yes or no from what I know, but here's what I found:")
             confidence *= 0.8
