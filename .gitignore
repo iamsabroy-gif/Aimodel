@@ -9,3 +9,5 @@ writer_data/
 !aimodel/data/*.npz
 .aimodel_version
 aimodel_settings.json
+
+hf_data/

@@ -140,3 +140,19 @@ class TestDenials(unittest.TestCase):
     def test_a_denial_only_covers_what_it_denies(self):
         self.assertFalse(self.ask("Does the Moon have a surface?").startswith("Yes"))
         self.assertTrue(self.ask("Do fish have gills?").startswith("Yes"))
+
+
+class TestHuggingFaceConversion(unittest.TestCase):
+    def test_chunks_stay_small_and_keep_paragraphs_whole(self):
+        import os
+        import tempfile
+        from aimodel import hf_convert
+        with tempfile.TemporaryDirectory() as d:
+            names = hf_convert.write_chunks(d, "X", ["a" * 40, "b" * 40, "c" * 40], size=100)
+            self.assertEqual(names, ["X_001.txt", "X_002.txt"])
+            self.assertEqual(open(os.path.join(d, names[0])).read(), "a" * 40 + "\n\n" + "b" * 40)
+
+    def test_answers_become_words_for_the_scorer(self):
+        from aimodel import hf_convert
+        self.assertEqual(hf_convert.words("Lymph Nodes"), ["lymph", "nodes"])
+        self.assertEqual(hf_convert.squeeze("a   b \t c"), "a b c")
