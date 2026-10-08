@@ -77,7 +77,7 @@ _NET_ERRORS = (urllib.error.URLError, TimeoutError, OSError, ValueError)
 
 def _show_reply(model: LearningModel, reply: str, confidence: float) -> None:
     print(f"ai> {reply}")
-    if model.last_source in ("noted", "smalltalk"):
+    if model.last_source in ("noted", "smalltalk", "calculation"):
         return
     if model.last_source == "memory":
         where = "memory"
@@ -216,7 +216,7 @@ def main(argv: list[str] | None = None) -> None:
                     continue
                 print(f"ai> To answer '{model.last_query}' I used:")
                 labels = {"fact": "fact", "evidence": "evidence", "inference": "reasoning",
-                          "memory": "memory", "writer": "writer", "smalltalk": "greeting"}
+                          "memory": "memory", "writer": "writer", "smalltalk": "greeting", "calculation": "maths"}
                 for i, step in enumerate(model.last_trace, 1):
                     print(f"  {i}. [{labels.get(step['kind'], step['kind'])}] {step['text']}")
                     detail = f"source: {step['source']}"
