@@ -47,6 +47,8 @@ from .neural import WordEmbeddings
 from .ranker import FeedbackRanker
 from .reasoning import stem
 from . import mathsolver
+from .wordproblems import solve_story
+from .units import convert as convert_units
 from .quantities import Quantities
 from . import verify
 from .relations import Relations
@@ -294,10 +296,11 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
                 self.last_reply = f"{talk['reply']} {reply}"
                 return self.last_reply, confidence
             talk = None  # more than a greeting that I can't answer: handle the whole message
-        if (calc := mathsolver.solve(text)) is not None:  # sums are calculated, never guessed or recalled
+        if (calc := mathsolver.solve(text) or solve_story(text) or convert_units(text)) is not None:  # sums are calculated, never guessed
             self.last_reply = calc["error"] if "error" in calc else (
+                f"The answer is {calc['answer']}.  (steps: {'; '.join(calc['steps'])})" if calc.get("story") else (
                 f"{calc['expression']} = {calc['answer']}"
-                + (f"  (steps: {'; '.join(calc['steps'])})" if len(calc["steps"]) > 1 else ""))
+                + (f"  (steps: {'; '.join(calc['steps'])})" if len(calc["steps"]) > 1 else "")))
             self.last_source, best = "calculation", 1.0
             self.last_trace = [{"kind": "calculation", "text": step, "source": "my calculator"}
                                for step in calc["steps"]]
