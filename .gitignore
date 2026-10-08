@@ -7,3 +7,5 @@ __pycache__/
 writer_data/
 .venv/
 !aimodel/data/*.npz
+.aimodel_version
+aimodel_settings.json

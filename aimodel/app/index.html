@@ -68,10 +68,17 @@ pre{white-space:pre-wrap;font-size:12px;background:var(--panel2);padding:10px;bo
 label.sw{display:flex;justify-content:space-between;align-items:center;padding:8px 0}
 .q-ok{color:var(--good)}.q-miss{color:var(--bad)}
 .file{display:block;border:2px dashed var(--line);border-radius:14px;padding:16px;text-align:center;color:var(--dim)}
+.bar-update{display:none;align-items:center;gap:10px;padding:9px 16px;background:var(--accent);color:var(--accent-text);font-size:14px}
+.bar-update.on{display:flex}
+.bar-update span{flex:1}
+.bar-update button{background:var(--accent-text);color:var(--accent);border:0;border-radius:99px;padding:6px 14px;font:inherit;font-weight:600;min-height:32px}
+.bar-update button:disabled{opacity:.6}
+ul.changes{margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--dim)}
 </style>
 </head>
 <body>
 <header><h1>Aimodel</h1><span class="pill" id="pill">connecting…</span></header>
+<div class="bar-update" id="updateBar"><span id="updateMsg"></span><button id="updateBtn">Update now</button></div>
 <main>
   <section id="chat" class="on">
     <div id="log"><div class="sys">Say hello, ask a question, or tell me a fact like “My sister lives in Delhi”.<br>Feed me datasets in the <b>Train</b> tab.</div></div>
@@ -131,6 +138,15 @@ label.sw{display:flex;justify-content:space-between;align-items:center;padding:8
   </section>
 
   <section id="brain">
+    <div class="card">
+      <h2>App version</h2>
+      <dl><dt>This copy</dt><dd id="verNow">…</dd><dt>On GitHub</dt><dd id="verLatest">…</dd></dl>
+      <ul class="changes" id="verChanges"></ul>
+      <label class="sw">Update automatically<input type="checkbox" id="autoUpdate" style="width:auto"></label>
+      <div class="note">When new code is pushed to GitHub, this copy brings it in and restarts by itself (not while a task is running).</div>
+      <div class="row"><button class="secondary" id="checkBtn">Check for updates</button><button class="primary" id="updateBtn2" disabled>Update now</button></div>
+      <div class="note" id="verNote"></div>
+    </div>
     <div class="card"><h2>Brain</h2><dl id="stats"></dl></div>
     <div class="card">
       <h2>Settings</h2>
@@ -315,6 +331,7 @@ $("memBtn").onclick = () => know("mem").catch((e) => alert(e.message));
 async function refresh() {
   try {
     const s = await api("/api/state");
+    if (!loadedCommit) loadedCommit = s.version.commit;
     $("pill").textContent = s.name ? "hi, " + s.name : "online"; $("pill").className = "pill";
     $("stats").innerHTML = Object.entries(s.stats).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("");
     $("online").checked = s.online; $("writer").checked = s.writer;
@@ -333,6 +350,71 @@ $("forgetBtn").onclick = async () => {
   const r = await api("/api/forget", {text: $("forgetText").value}).catch((e) => ({error: e.message}));
   $("forgetOut").textContent = r.error || `Forgot ${r.forgot} taught repl${r.forgot === 1 ? "y" : "ies"}.`; refresh();
 };
+// ---- updates: new code pushed to GitHub shows up here
+let loadedCommit = null, updating = false;
+function showUpdate(u) {
+  const bar = $("updateBar");
+  $("verNow").textContent = u.current.commit + (u.current.date ? " · " + u.current.date : "");
+  $("verLatest").textContent = u.error ? "can't check" : (u.latest || "…");
+  $("autoUpdate").checked = !!u.auto;
+  $("verChanges").innerHTML = (u.changes || []).map((c) => "<li>" + esc(c) + "</li>").join("");
+  $("verNote").className = "note" + (u.error ? " err" : "");
+  $("verNote").textContent = u.error ? u.error : u.available ? (u.can_update ? "A new version is ready." : u.why_not)
+    : (u.checked ? "You have the latest version." : "");
+  $("updateBtn2").disabled = updating || !(u.available && u.can_update);
+  if (u.available && !updating) {
+    bar.classList.add("on");
+    $("updateMsg").textContent = u.can_update ? `A new version is available (${u.changes.length > 1 ? u.changes.length + " changes" : "1 change"}).` : u.why_not;
+    $("updateBtn").hidden = !u.can_update;
+  } else if (!updating) bar.classList.remove("on");
+}
+async function checkUpdate(look, now) {
+  try { showUpdate(await api("/api/update" + (look ? (now ? "?check=force" : "?check=1") : ""))); } catch (e) { /* offline: try later */ }
+}
+async function applyUpdate() {
+  if (updating) return;
+  updating = true; $("updateBtn").disabled = $("updateBtn2").disabled = true;
+  $("updateBar").classList.add("on"); $("updateBtn").hidden = false; $("updateMsg").textContent = "Updating…";
+  try {
+    const r = await api("/api/update/apply", {});
+    if (r.error) throw new Error(r.error);
+    if (!r.updated) { $("updateMsg").textContent = r.message; updating = false; return checkUpdate(true, true); }
+    if (!r.restarting) {
+      $("updateMsg").textContent = "Updated. Stop the app (Ctrl+C) and start it again to use the new version.";
+      $("updateBtn").hidden = true; return;
+    }
+    $("updateMsg").textContent = "Updated. Restarting…"; $("updateBtn").hidden = true;
+    await waitForNewVersion();
+  } catch (e) {
+    updating = false; $("updateMsg").textContent = e.message; $("updateBtn").hidden = false; $("updateBtn").disabled = false;
+  }
+}
+async function waitForNewVersion() {
+  for (let i = 0; i < 90; i++) {  // up to about 90 seconds
+    await new Promise((r) => setTimeout(r, 1000));
+    try {
+      const s = await api("/api/state");
+      if (s.version.commit !== loadedCommit) { location.reload(); return; }
+    } catch (e) { $("updateMsg").textContent = "Restarting…"; }
+  }
+  updating = false; $("updateMsg").textContent = "It is taking long to restart. Reload this page in a moment.";
+}
+$("updateBtn").onclick = $("updateBtn2").onclick = applyUpdate;
+$("checkBtn").onclick = async () => { $("verNote").textContent = "Checking…"; await checkUpdate(true, true); };
+$("autoUpdate").onchange = (e) => api("/api/update/settings", {auto: e.target.checked}).then(showUpdate).catch(() => {});
+// notice an update the server made by itself (it restarted with new code), and look for new ones now and then
+setInterval(async () => {
+  if (updating || document.hidden) return;
+  try {
+    const s = await api("/api/state");
+    if (loadedCommit && s.version.commit !== loadedCommit) { $("updateBar").classList.add("on"); $("updateBtn").hidden = true;
+      $("updateMsg").textContent = "Aimodel was updated. Reloading…"; setTimeout(() => location.reload(), 1500); }
+  } catch (e) { /* the server may be restarting */ }
+}, 20000);
+setInterval(() => { if (!document.hidden) checkUpdate(true); }, 5 * 60 * 1000);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) checkUpdate(true); });
+setTimeout(() => checkUpdate(true), 1500);
+
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => {});
 refresh();
 </script>

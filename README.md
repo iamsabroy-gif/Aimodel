@@ -115,6 +115,24 @@ It saves to `brain.json` (use `--brain` for another file), the same brain the te
 The neural network's training happens on the device running the server, so the 3-million-parameter
 transformer writer is still trained on Kaggle (it is used if `writer.npz` is next to the brain).
 
+### Getting new code pushed to GitHub
+
+The app updates itself. Open **Brain → App version** to see which version this copy is and what is on GitHub.
+When new code has been pushed, a bar appears at the top of the app ("A new version is available") with an
+**Update now** button; it fetches the code, restarts the server and reloads the page, keeping the same access link.
+**Update automatically** (on by default) does the same without asking: every 30 minutes the server looks at GitHub and,
+when nothing is running, brings in the new code and restarts. Switch it off if you would rather press the button.
+
+- A copy made with `git clone` is **fast-forwarded** only. It never merges, and it refuses to touch a copy that has
+  changes of its own (it tells you so). Your brain, writer and anything git does not track are never touched.
+- A copy from a downloaded ZIP (or Pydroid) has no git, so the updater downloads the latest ZIP and copies its files
+  over this folder; your brain files are not in the ZIP, so they stay.
+- What gets updated is the copy the server runs from (your computer, or your phone if you run it in Termux), so the
+  phone's browser shows the new version as soon as that server has restarted.
+- An update that needs a new Python package says so on the next run (`pip install -r requirements.txt`); the updater does
+  not install packages.
+- The first time, on a copy from before this feature, run `git pull` once and restart; after that it takes care of itself.
+
 ## Run it on Kaggle
 
 **Easiest:** import `notebooks/aimodel_on_kaggle.ipynb` (Kaggle: **Create → New Notebook →

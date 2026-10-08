@@ -15,7 +15,9 @@ import mimetypes
 import os
 import secrets
 import socket
+import sys
 import threading
+import time
 import urllib.error
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
@@ -23,8 +25,11 @@ from urllib.parse import parse_qs, urlparse
 from .datasets import import_dataset
 from .documents import DocumentError
 from .model import LearningModel
+from .updater import UpdateError, Updater
 
 APP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "app")
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # the folder that holds aimodel/ (and .git)
+CHECK_EVERY = float(os.environ.get("AIMODEL_CHECK_SECONDS", 30 * 60))  # seconds between automatic looks at GitHub
 MAX_BODY = 25_000_000  # bytes: the biggest dataset upload
 NET_ERRORS = (urllib.error.URLError, TimeoutError, OSError, ValueError)
 
@@ -53,6 +58,62 @@ class AppState:
             except (OSError, ValueError, KeyError):
                 pass
         self.job = Job()
+        self.updater = Updater(ROOT)
+        self.restart = None  # set by main(): start the server again so new code is loaded
+        self.settings_path = os.path.join(os.path.dirname(os.path.abspath(brain)), "aimodel_settings.json")
+        self.auto_update = self._read_settings().get("auto_update", True)
+        self._last_check = 0.0
+
+    # -- updates
+    def _read_settings(self) -> dict:
+        try:
+            with open(self.settings_path, encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+        except (OSError, ValueError):
+            return {}
+
+    def set_auto_update(self, on: bool) -> None:
+        self.auto_update = bool(on)
+        data = self._read_settings()
+        data["auto_update"] = self.auto_update
+        with open(self.settings_path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+
+    def update_status(self, check: bool = False, force: bool = False) -> dict:
+        """What version this is and whether GitHub has newer code. Automatic checks are at most once every 20
+        seconds; pressing "Check for updates" (force) always looks."""
+        if check and (force or time.time() - self._last_check > 20):
+            self._last_check = time.time()
+            self.updater.check()
+        return {**self.updater.status(), "auto": self.auto_update, "restart": self.restart is not None}
+
+    def apply_update(self) -> dict:
+        """Pull the new code, save the brain and (if I can) restart so the new code runs."""
+        if self.job.state["running"]:
+            raise UpdateError("A task is still running. Wait for it to finish, then update.")
+        with self.lock:
+            result = self.updater.apply()
+            self.save()
+        result["restarting"] = bool(result["updated"] and self.restart)
+        if result["restarting"]:
+            threading.Timer(1.0, self.restart).start()  # after this answer has been sent
+        return result
+
+    def auto_update_loop(self, stop: threading.Event, first_after: float = 30.0) -> None:
+        """Every so often: if auto-update is on and nothing is running, bring in what was pushed."""
+        wait = min(first_after, CHECK_EVERY)
+        while not stop.wait(wait):
+            wait = CHECK_EVERY
+            if not self.auto_update or self.job.state["running"]:
+                continue
+            try:
+                self._last_check = time.time()
+                status = self.updater.check()
+                if status["available"] and status["can_update"]:
+                    self.apply_update()
+            except UpdateError:
+                pass  # the app shows the problem the next time it asks
 
     # -- helpers
     def save(self) -> None:
@@ -61,6 +122,7 @@ class AppState:
     def overview(self) -> dict:
         m = self.model
         return {"stats": m.stats(), "online": self.online, "job": self.job.snapshot(),
+                "version": self.updater.current(),
                 "vectors": len(m.pretrained) if m.pretrained is not None else 0,
                 "name": m.user_name() or None, "writer": m.writer is not None and m.writer_enabled}
 
@@ -282,6 +344,9 @@ def make_handler(state: AppState, token: str | None):
                     return self._json(state.overview())
             if route == "/api/job":
                 return self._json(state.job.snapshot())
+            if route == "/api/update":
+                mode = (q.get("check") or [""])[0]
+                return self._json(state.update_status(check=bool(mode), force=mode == "force"))
             if route == "/api/facts":
                 return self._json({"facts": state.facts((q.get("topic") or [""])[0])})
             if route == "/api/memories":
@@ -336,6 +401,14 @@ def make_handler(state: AppState, token: str | None):
             if route == "/api/online":
                 state.online = bool(b.get("on"))
                 return self._json({"online": state.online})
+            if route == "/api/update/apply":
+                try:
+                    return self._json(state.apply_update())
+                except UpdateError as e:
+                    return self._json({"updated": False, "error": str(e)}, 409)
+            if route == "/api/update/settings":
+                state.set_auto_update(bool(b.get("auto")))
+                return self._json(state.update_status())
             if route == "/api/vectors":
                 with state.lock:
                     if b.get("on", True):
@@ -386,6 +459,19 @@ def main(argv: list[str] | None = None) -> None:
     local = args.host in ("127.0.0.1", "localhost", "::1")
     token = None if local else (args.token or secrets.token_urlsafe(9))
     httpd = serve(args.brain, args.host, args.port, not args.offline, token)
+    restart_args = ["--brain", args.brain, "--host", args.host, "--port", str(args.port)]
+    restart_args += (["--offline"] if args.offline else []) + (["--token", token] if token else [])
+
+    def restart() -> None:
+        """Start the server again in this same process, with the same settings and the same access link."""
+        httpd.state.save()  # type: ignore[attr-defined]
+        httpd.server_close()
+        print("\nAimodel was updated: restarting...", flush=True)
+        os.execv(sys.executable, [sys.executable, "-m", "aimodel.server", *restart_args])
+
+    httpd.state.restart = restart  # type: ignore[attr-defined]
+    stop = threading.Event()
+    threading.Thread(target=httpd.state.auto_update_loop, args=(stop,), daemon=True).start()  # type: ignore[attr-defined]
     where = "127.0.0.1" if local else lan_address()
     suffix = f"/?token={token}" if token else "/"
     print(f"Aimodel app is running. Open this on your phone's browser:\n\n    http://{where}:{args.port}{suffix}\n")
@@ -397,6 +483,7 @@ def main(argv: list[str] | None = None) -> None:
     except KeyboardInterrupt:
         pass
     finally:
+        stop.set()
         httpd.state.save()  # type: ignore[attr-defined]
         httpd.server_close()
         print("\nSaved. Bye!")
