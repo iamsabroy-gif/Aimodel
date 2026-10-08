@@ -47,6 +47,8 @@ from .neural import WordEmbeddings
 from .ranker import FeedbackRanker
 from .reasoning import stem
 from . import mathsolver
+from .quantities import Quantities
+from .relations import Relations
 from .smalltalk import SmallTalkMixin
 from .study import GENERIC as _GENERIC, WEAK_WORDS, StudyMixin, bare as _bare
 from .text import STOPWORDS, TfidfIndex, keywords, looks_like_question, split_sentences, tokenize
@@ -830,11 +832,19 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
                 return f"{verdict}. {chain}, so {subj} {words[0]} {obj}.", conf, steps
         return None
 
-    def explain(self, text: str):
+    def explain(self, text: str, _depth: int = 0):
         """Answer a question in the model's own words, with the reasoning steps.
 
         Returns (answer, confidence, steps) or None.
         """
+        links = self._relations()
+        described = links.rewrite(text)  # "the school with 620 students" -> "Oak School"
+        if described and described != text and not _depth:
+            return self.explain(described, _depth=1)
+        worked = self._quantities().answer(text) or links.answer(text)  # compared, counted, chained
+        if worked:
+            reply, steps = worked
+            return reply, 0.9, steps
         text = self.understand_question(text)
         kind = rsn.question_kind(text)
         asked = members_question(text)
@@ -852,6 +862,9 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
                      or self._said_so(text))
             if proof:
                 return proof
+            hedged = links.closed_world(text)  # everything I know points elsewhere: a hedged no
+            if hedged:
+                return hedged[0], 0.6, hedged[1]
         if kind == "why":
             return self._explain_why(text)
         if kind == "how":
@@ -1007,6 +1020,22 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
                 words.update(tokenize(m["prompt"]))
             self._vocab_cache = (key, words | {stem(w) for w in words})
         return self._vocab_cache[1]
+
+    def _quantities(self) -> Quantities:
+        key = (len(self.knowledge), len(self.facts))
+        if getattr(self, "_quantities_cache", (None,))[0] != key:
+            sentences = [{"text": k["text"], "source": k["source"]} for k in self.knowledge]
+            sentences += [{"text": f["text"], "source": f["source"]} for f in self.facts if f.get("text")]
+            self._quantities_cache = (key, Quantities(sentences))
+        return self._quantities_cache[1]
+
+    def _relations(self) -> Relations:
+        key = (len(self.knowledge), len(self.facts))
+        if getattr(self, "_relations_cache", (None,))[0] != key:
+            sentences = [{"text": k["text"], "source": k["source"]} for k in self.knowledge]
+            sentences += [{"text": f["text"], "source": f["source"]} for f in self.facts if f.get("text")]
+            self._relations_cache = (key, Relations(sentences))
+        return self._relations_cache[1]
 
     def understand_question(self, text: str) -> str:
         return understand(text, self._vocabulary())
