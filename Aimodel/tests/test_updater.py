@@ -238,6 +238,20 @@ class TestDownloadedCopy(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(self.outer, "evil.txt")))  # a ../ path in the ZIP is ignored
         self.assertFalse(self.updater.check()["available"])  # and now it knows it is current
 
+    def test_a_project_inside_a_repo_subfolder_is_unpacked_at_the_root(self):
+        old = FakeGitHub.files
+        FakeGitHub.files = {"README.md": b"repo readme", "Aimodel/app.txt": b"new",
+                            "Aimodel/aimodel/x.py": b"print(1)"}
+        try:
+            self.updater.check()
+            self.assertTrue(self.updater.apply()["updated"])
+        finally:
+            FakeGitHub.files = old
+        self.assertTrue(os.path.exists(os.path.join(self.root, "aimodel", "x.py")))
+        self.assertTrue(os.path.exists(os.path.join(self.root, "app.txt")))
+        self.assertFalse(os.path.exists(os.path.join(self.root, "Aimodel", "app.txt")))
+        self.assertFalse(os.path.exists(os.path.join(self.root, "README.md")))  # outside the project folder
+
     def test_a_new_version_on_github_is_noticed_later(self):
         self.updater.check()
         self.updater.apply()

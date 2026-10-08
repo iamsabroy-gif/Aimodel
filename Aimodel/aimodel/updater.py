@@ -46,6 +46,9 @@ def _git(root: str, *args: str, timeout: float = 40.0) -> str:
     return done.stdout.strip()
 
 
+SUBDIR = "Aimodel/"  # where the project lives inside the GitHub repo
+
+
 class Updater:
     def __init__(self, root: str, api_url: str | None = None, zip_url: str | None = None) -> None:
         self.root = os.path.abspath(root)
@@ -180,10 +183,16 @@ class Updater:
             raise UpdateError("The download wasn't a valid ZIP file.") from None
         names = [n for n in archive.namelist() if n and not n.endswith("/")]
         top = names[0].split("/")[0] + "/" if names else ""
+        # The project may sit in a subfolder of the repo (Aimodel/aimodel/...): unpack just that folder.
+        sub = SUBDIR if any(n.startswith(top + SUBDIR + "aimodel/") for n in names) else ""
         staged = tempfile.mkdtemp(prefix="aimodel-update-")
         try:
             for name in names:  # unpack to a scratch folder first: nothing changes unless it all unpacks
                 rel = name[len(top):] if name.startswith(top) else name
+                if sub:
+                    if not rel.startswith(sub):
+                        continue  # repo files outside the project folder
+                    rel = rel[len(sub):]
                 target = os.path.realpath(os.path.join(staged, rel))
                 if not rel or not target.startswith(os.path.realpath(staged) + os.sep):
                     continue  # a path that would escape the folder: skip it
