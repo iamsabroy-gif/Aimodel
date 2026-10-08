@@ -122,3 +122,21 @@ class TestAnswerKinds(unittest.TestCase):
         m.add_document("Albert Einstein (14 March 1879 - 18 April 1955) was a German-born physicist. "
                        "He developed the theory of relativity.", "Albert_Einstein.txt")
         self.assertIn("1879", m.respond("When was Einstein born?", learn=False)[0] or "")
+
+
+class TestDenials(unittest.TestCase):
+    def setUp(self):
+        self.m = LearningModel(seed=0)
+        self.m.add_document("The Moon has no air and no liquid water on its surface. Venus has no moons. "
+                            "Penguins cannot fly. Fish have gills. Tigers live in forests.", "t.txt")
+
+    def ask(self, q):
+        return self.m.respond(q, learn=False)[0] or ""
+
+    def test_a_denial_is_not_read_as_a_yes(self):
+        for q in ["Does the Moon have air?", "Does Venus have moons?", "Can penguins fly?"]:
+            self.assertTrue(self.ask(q).startswith("No"), (q, self.ask(q)))
+
+    def test_a_denial_only_covers_what_it_denies(self):
+        self.assertFalse(self.ask("Does the Moon have a surface?").startswith("Yes"))
+        self.assertTrue(self.ask("Do fish have gills?").startswith("Yes"))

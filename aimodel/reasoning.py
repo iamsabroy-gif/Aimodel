@@ -20,7 +20,7 @@ _AUX = {"do", "does", "did"}
 _ADVERBS = {"also", "often", "usually", "mainly", "primarily", "mostly", "generally",
             "typically", "always", "sometimes", "only", "still", "really", "even", "just",
             "can", "could", "will", "would", "may", "might", "must", "should"}
-_NEG = {"not", "never", "n't"}
+_NEG = {"not", "never", "n't", "cannot"}
 _BASE_VERBS = """use produce convert cause lead_to result_in make create need require allow
 help depend_on live eat work like love prefer want own study build drive play absorb release
 store provide protect form grow feed orbit support run connect carry contain include consist_of
@@ -227,6 +227,8 @@ def extract_fact(sentence: str, topic: str | None = None) -> dict | None:
             obj.pop()
         if not obj:
             return None
+        if obj[0].lower() == "no":  # "Venus has no moons" denies having moons
+            neg = True
         subj = " ".join(words[:i])
         if subj.lower() in _PRONOUNS:
             if not topic:

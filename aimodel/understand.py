@@ -87,6 +87,14 @@ FAMILIES = [
     "wear wore worn",
     "carry carried equipped",
     "moon satellite",
+    # paraphrases between how a question is asked and how a text says it. Each group was kept only because
+    # it fixed answers on the dev sets without turning a correct decline into an answer (tried one by one).
+    "hunt prey predator predators stalk ambush catch kill",
+    "export exports exporter sell sells trade",
+    "ingredient ingredients made contain contains composed",
+    "communicate communication signal signals vocalization vocalizations sound sounds call calls speak talk",
+    "form formed formation arise arising arose created origin originate",
+    "ban banned prohibit forbid forbade outlaw",
 ]
 _FAMILY_OF: dict[str, set[str]] = {}
 for _group in FAMILIES:
@@ -287,6 +295,8 @@ def check_claim(facts: list[dict], text: str):
         if not claims or not wanted:
             continue
         for _, what, neg, used, inherited in sorted(claims, key=lambda c: c[4]):
+            if neg:  # "has no air and no liquid water on its surface" denies air and water, not the surface
+                what = re.split(r"\b(?:on|in|at|from|with|of|to|for|by|under|over)\b", what)[0]
             if wanted <= {stem(t) for t in tokenize(what)}:
                 return ("no" if neg else "inherited" if inherited else "yes"), used
         direct = [c[3][-1] for c in claims if not c[4]]

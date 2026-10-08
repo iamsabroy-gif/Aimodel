@@ -224,6 +224,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         self._init_study()
         self._init_writer()
         self._init_smalltalk()
+        self._calibrator = None  # a learned answer-or-decline rule: set by load_calibrator()
 
     # ------------------------------------------------------------------ memory
     def learn(self, prompt: str, response: str) -> None:
@@ -724,6 +725,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             self._candidate_log.append({"question": text, "candidates": list(cands)})
 
         cands.sort(key=lambda c: -c["order"])
+        cands_all = list(cands)
         top = max(c["score"] for c in cands)  # how sure I am still comes from the hand-made score
         chosen, covered = [], set()
         while cands and len(chosen) < max_sentences:
@@ -743,18 +745,50 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
         # Nepal" is not answered by a sentence that only mentions Nepal.
         together = any(content <= (c["covered"] | c["context"]) for c in chosen)  # one sentence says it all
         one_source = len({self.knowledge[c["i"]]["source"] for c in chosen}) == 1
+        self.last_decision = self._decision_features(text, wanted, content, chosen, cands_all, coverage, confidence,
+                                                     top, together, one_source, covered, about)
         rejected = [name for name, bad in (
             ("coverage", coverage < 0.5), ("key", self._key_word(wanted) not in (covered | about)),
             ("confidence", confidence < self.knowledge_threshold),
             ("content", 0 < len(content) <= 3 and not content <= (covered | about)),
             ("together", 1 < len(content) <= 3 and not together and not one_source and not _SEVERAL.search(text))) if bad]
-        if rejected:
+        if self._calibrator is not None and not self._force_evidence:
+            accept = self._calibrator.accepts(self.last_decision)
+            if accept is not None:
+                rejected = [] if accept else ["learned"]
+        if rejected and not self._force_evidence:
             return None
         trace = [{"kind": "evidence", "text": self.knowledge[c["i"]]["text"],
                   "source": self.knowledge[c["i"]]["source"], "pos": self.knowledge[c["i"]].get("pos", 0),
                   "score": c["score"], "matched": sorted(c["covered"]), "features": c["features"]}
                  for c in chosen]
         return " ".join(t["text"] for t in trace), confidence, trace
+
+    def load_calibrator(self, path: str | None = None) -> bool:
+        """Use the learned answer-or-decline rule (see calibrate.py) instead of the hand-set rules."""
+        from .calibrate import Calibrator
+        self._calibrator = Calibrator.load(path) if path else Calibrator.load()
+        return self._calibrator is not None
+
+    _force_evidence = False
+    last_decision: dict | None = None
+
+    def _decision_features(self, text, wanted, content, chosen, cands, coverage, confidence, top, together,
+                           one_source, covered, about) -> dict:
+        """Numbers that say how trustworthy the evidence for an answer is (used to decide answer or decline)."""
+        asked = verify.kind(text)
+        first = chosen[0]
+        second = cands[1]["order"] if len(cands) > 1 else 0.0
+        seen = covered | about
+        return {
+            "confidence": float(confidence), "coverage": float(coverage), "top": float(top),
+            "content_n": float(len(content)), "content_hit": len(content & seen) / len(content) if content else 1.0,
+            "key_in": float(self._key_word(wanted) in seen), "together": float(together),
+            "one_source": float(one_source), "n_chosen": float(len(chosen)),
+            "margin": float(first["order"] - second) / RANK_SCALE, "order": float(first["order"]) / RANK_SCALE,
+            "fit": float(first.get("fit", 0.0)), "asked": float(asked is not None),
+            "q_len": float(len(tokenize(text))), "n_cands": float(min(len(cands), 60)) / 60,
+        }
 
     # --------------------------------------------------------------- reasoning
     def _relevant_facts(self, text: str) -> tuple[list[dict], float]:
@@ -870,7 +904,7 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
                 return shared
         if kind == "yesno":
             proof = (self._prove_either(text) or self._prove(text) or self._check_claim(text)
-                     or self._said_so(text))
+                     or self._can_question(text) or self._said_so(text))
             if proof:
                 return proof
             hedged = links.closed_world(text)  # everything I know points elsewhere: a hedged no
@@ -967,6 +1001,28 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
                     step = {"kind": "evidence", "text": entry["text"], "source": entry["source"],
                             "sentence": entry["text"]}
                     return (f"Probably yes. {rsn.sentence(clause.strip())}", 0.6, [step])
+        return None
+
+    def _can_question(self, text: str):
+        """"Can penguins fly?" when a studied sentence says they cannot (or can)."""
+        words = tokenize(text)
+        if len(words) < 3 or words[0] not in ("can", "could"):
+            return None
+        subject, verb = {stem(w) for w in words[1:-1] if w not in STOPWORDS}, stem(words[-1])
+        if not subject or verb in STOPWORDS:
+            return None
+        for entry in self.knowledge:
+            for clause in re.split(r";|,\s+(?:and|but|though|although|while|whereas)\s+", rsn.clean(entry["text"])):
+                heard = [stem(t) for t in tokenize(clause)]
+                if not (subject <= set(heard) and verb in heard) or len(clause.split()) > 30:
+                    continue
+                at = heard.index(verb)
+                before = heard[:at][-3:]  # the words just before the verb: "cannot fly", "are unable to fly"
+                step = {"kind": "evidence", "text": entry["text"], "source": entry["source"], "sentence": entry["text"]}
+                if {"cannot", "unable", "never", "not", "n't"} & set(before):
+                    return f"No. {rsn.sentence(clause.strip())}", 0.85, [step]
+                if {"can", "able", "capable", "could"} & set(before):
+                    return f"Yes. {rsn.sentence(clause.strip())}", 0.85, [step]
         return None
 
     def _check_claim(self, text: str):
