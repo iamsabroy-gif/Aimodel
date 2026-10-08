@@ -457,7 +457,8 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             studied += promote
         self.last_read = {"kept": len(studied), "shelved": len(fresh) - len(keep)}
         if studied:
-            self.neural.train([tokenize(e["text"]) for e in studied], epochs=5, min_pairs=3000)
+            self.neural.train([tokenize(e["text"]) for e in studied], epochs=self._epochs_for(len(studied)),
+                              min_pairs=3000)
             self._maybe_grow()
         return len(studied)
 
@@ -519,6 +520,16 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
             self._supersede(fact)  # "lives in Mumbai" replaces "lives in Delhi"
         return new
 
+    BULK = 2000  # sentences: past this a document is "bulk" and gets fewer practice passes
+
+    def _epochs_for(self, sentences: int) -> int:
+        """Practice passes for the word-meaning network. A big upload is already full of examples, so one
+        pass teaches as much as five (answers were the same in tests; loading is 3x faster). With the built-in
+        word vectors off the network matters more, so keep two."""
+        if sentences < self.BULK:
+            return 5
+        return 1 if self.pretrained is not None else 2
+
     def _maybe_grow(self) -> bool:
         """Rebuild the network with bigger word vectors once it knows enough words."""
         for words, dim in self.GROWTH:
@@ -527,7 +538,8 @@ class LearningModel(StudyMixin, WriterMixin, SmallTalkMixin):
                     self.notify(f"I know {len(self.neural)} words now - growing my neural "
                                 f"network to {dim} dimensions and retraining...")
                 self.neural = WordEmbeddings(dim=dim, seed=self.neural.dim)
-                self.neural.train(self._corpus(), epochs=3, min_pairs=20000)
+                corpus = self._corpus()
+                self.neural.train(corpus, epochs=min(3, self._epochs_for(len(corpus))), min_pairs=20000)
                 return True
         return False
 

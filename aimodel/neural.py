@@ -26,11 +26,14 @@ def _apply(matrix: np.ndarray, rows: np.ndarray, updates: np.ndarray, max_norm: 
     updates makes training blow up, so they are damped by sqrt(occurrences)
     and each row's step is capped.
     """
-    uniq, inv = np.unique(rows, return_inverse=True)
-    total = np.zeros((len(uniq), matrix.shape[1]), dtype=matrix.dtype)
-    np.add.at(total, inv, updates)
-    total /= np.sqrt(np.bincount(inv))[:, None]
-    norms = np.linalg.norm(total, axis=1, keepdims=True)
+    # One sort groups the rows; reduceat then sums each group (np.add.at does the same far more slowly).
+    order = np.argsort(rows, kind="stable")
+    sorted_rows = rows[order]
+    starts = np.flatnonzero(np.concatenate(([True], sorted_rows[1:] != sorted_rows[:-1])))
+    uniq = sorted_rows[starts]
+    total = np.add.reduceat(updates[order], starts, axis=0).astype(matrix.dtype, copy=False)
+    total /= np.sqrt(np.diff(np.append(starts, len(rows))))[:, None]
+    norms = np.sqrt(np.einsum("ij,ij->i", total, total))[:, None]
     total *= np.minimum(1.0, max_norm / np.maximum(norms, 1e-12))
     matrix[uniq] += total
 
@@ -105,6 +108,7 @@ class WordEmbeddings:
         keep = np.minimum(1.0, (np.sqrt(freq / t) + 1) * t / np.maximum(freq, 1e-12))
         noise = self.counts ** 0.75
         noise /= noise.sum()
+        cdf = np.cumsum(noise)
 
         pairs_per_epoch = sum(min(len(ids), 2 * self.window) * len(ids) for ids in sentences) // 2
         epochs = min(200, max(epochs, -(-min_pairs // max(1, pairs_per_epoch))))
@@ -117,7 +121,8 @@ class WordEmbeddings:
             for start in range(0, len(centers), batch):
                 c = centers[start:start + batch]
                 o = contexts[start:start + batch]
-                neg = self._rng.choice(len(self.words), size=(len(c), self.negatives), p=noise)
+                neg = np.minimum(np.searchsorted(cdf, self._rng.random((len(c), self.negatives))),
+                                 len(self.words) - 1)  # draws from `noise`; the table is built once, not per batch
                 targets = np.concatenate([o[:, None], neg], axis=1)        # (B, 1+K)
                 vc = self.w_in[c]                                          # (B, d)
                 vo = self.w_out[targets]                                   # (B, 1+K, d)

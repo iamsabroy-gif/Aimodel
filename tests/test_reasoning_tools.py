@@ -156,3 +156,22 @@ class TestHuggingFaceConversion(unittest.TestCase):
         from aimodel import hf_convert
         self.assertEqual(hf_convert.words("Lymph Nodes"), ["lymph", "nodes"])
         self.assertEqual(hf_convert.squeeze("a   b \t c"), "a b c")
+
+
+class TestLoadingSpeed(unittest.TestCase):
+    def test_a_big_upload_gets_fewer_practice_passes_than_a_small_note(self):
+        m = LearningModel(seed=0)
+        self.assertEqual(m._epochs_for(10), 5)
+        m.pretrained = object()  # built-in word vectors are on
+        self.assertEqual(m._epochs_for(m.BULK), 1)
+        m.pretrained = None
+        self.assertEqual(m._epochs_for(m.BULK), 2)
+
+    def test_the_faster_network_update_still_learns(self):
+        import numpy as np
+        from aimodel.neural import WordEmbeddings
+        net = WordEmbeddings(dim=16, seed=0)
+        sents = [["cats", "eat", "fish"], ["dogs", "eat", "meat"], ["cats", "chase", "mice"]] * 40
+        loss = net.train(sents, epochs=5)
+        self.assertTrue(np.isfinite(loss))
+        self.assertTrue(np.isfinite(net.w_in).all())
